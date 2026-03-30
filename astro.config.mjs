@@ -15,8 +15,16 @@ export default defineConfig({
 				{
 					label: 'Guías',
 					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', slug: 'guides/example' },
+						{
+							label: 'Flujo básico',
+							autogenerate: { directory: 'guides/basic-flow' },
+							collapsed: false,
+						},
+						{
+							label: 'Flujo 3ppi',
+							autogenerate: { directory: 'guides/3ppi-flow' },
+							collapsed: false,
+						},
 					],
 				},
 				{

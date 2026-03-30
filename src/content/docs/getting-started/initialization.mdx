@@ -1,0 +1,110 @@
+---
+title: Inicialización del cliente
+description: Cómo configurar e inicializar el cliente gRPC de PCH Switch con los certificados y parámetros de conexión.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+El cliente gRPC requiere tres parámetros principales para establecer la conexión: el identificador del participante (`fspId`), la dirección del servidor, y los archivos de certificados. Una vez inicializado, el cliente establece el stream autenticado mediante `StartStream` antes de que puedas enviar cualquier operación.
+
+## Inicializar y conectar
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    import { SwitchClient } from '@pch/switch-client';
+
+    const client = new SwitchClient({
+      fspId: 'MIBANCO',
+      host: 'switch.camara.mx:443',
+      privateKeyPath: './certs/participante.key',
+      certificatePath: './certs/participante.pem',
+      caCertificatePath: './certs/hub-intermediate.pem',
+    });
+
+    await client.connect();
+    console.log('Cliente conectado y autenticado');
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    SwitchClient client = SwitchClient.builder()
+        .fspId("MIBANCO")
+        .host("switch.camara.mx")
+        .port(443)
+        .privateKeyPath("./certs/participante.key")
+        .certificatePath("./certs/participante.pem")
+        .caCertificatePath("./certs/hub-intermediate.pem")
+        .build();
+
+    client.connect();
+    System.out.println("Cliente conectado y autenticado");
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    using Pch.SwitchClient;
+
+    var client = new SwitchClient(new SwitchClientOptions
+    {
+        FspId = "MIBANCO",
+        Host = "switch.camara.mx:443",
+        PrivateKeyPath = "./certs/participante.key",
+        CertificatePath = "./certs/participante.pem",
+        CaCertificatePath = "./certs/hub-intermediate.pem"
+    });
+
+    await client.ConnectAsync();
+    Console.WriteLine("Cliente conectado y autenticado");
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  El método `connect` / `ConnectAsync` ejecuta internamente el flujo de autenticación `StartStream` — incluyendo el reto criptográfico. No es necesario implementarlo manualmente.
+</Aside>
+
+## Parámetros de configuración
+
+| Parámetro | Descripción |
+|---|---|
+| `fspId` | Identificador del participante. Debe coincidir exactamente con el del certificado. |
+| `host` | Dirección y puerto del Switch (proporcionados por la Cámara). |
+| `privateKeyPath` | Ruta al archivo `participante.key`. |
+| `certificatePath` | Ruta al archivo `participante.pem`. |
+| `caCertificatePath` | Ruta al archivo `hub-intermediate.pem`. |
+
+## Manejar desconexiones
+
+El cliente mantiene el stream activo, pero pueden ocurrir desconexiones por inactividad o errores de red. Registra un handler para reconectarte automáticamente.
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    client.on('disconnected', async (reason) => {
+      console.warn('Stream desconectado:', reason);
+      await client.connect();
+    });
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    @Override
+    public void onDisconnected(String reason) {
+        System.out.println("Stream desconectado: " + reason);
+        client.connect();
+    }
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    client.OnDisconnected += async (reason) =>
+    {
+        Console.WriteLine($"Stream desconectado: {reason}");
+        await client.ConnectAsync();
+    };
+    ```
+  </TabItem>
+</Tabs>

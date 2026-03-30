@@ -1,0 +1,125 @@
+---
+title: Consultar beneficiario (LookupParty)
+description: Cómo consultar la información de un beneficiario por número de celular antes de iniciar una transferencia.
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+`LookupParty` es el primer paso del flujo de transferencia. Permite resolver la información de la cuenta destino a partir del número de celular del beneficiario. El Switch enruta la solicitud al banco receptor, que confirma si la cuenta está activa y devuelve los datos necesarios para completar la transferencia.
+
+Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya que la respuesta contiene los datos del beneficiario que se presentan para confirmación.
+
+## Enviar la solicitud
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    import { randomUUID } from 'crypto';
+
+    const requestId = randomUUID();
+
+    await client.sendLookupParty({
+      requestId,
+      phoneNumber: '5512345678',
+    });
+
+    // La respuesta llega de forma asíncrona a través del stream.
+    client.on('partyLookupResponse', (response) => {
+      if (response.requestId !== requestId) return;
+
+      console.log('Beneficiario:', response.partyName);
+      console.log('Cuenta destino:', response.partyId);
+      console.log('Banco receptor:', response.fspId);
+    });
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    String requestId = UUID.randomUUID().toString();
+
+    LookupPartyRequest request = LookupPartyRequest.newBuilder()
+        .setRequestId(requestId)
+        .setPhoneNumber("5512345678")
+        .build();
+
+    client.sendLookupParty(request);
+
+    // La respuesta llega de forma asíncrona. Implementa el handler:
+    @Override
+    public void onPartyLookupResponse(PartyLookupResponse response) {
+        if (!response.getRequestId().equals(requestId)) return;
+
+        System.out.println("Beneficiario: " + response.getPartyName());
+        System.out.println("Cuenta destino: " + response.getPartyId());
+        System.out.println("Banco receptor: " + response.getFspId());
+    }
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    var requestId = Guid.NewGuid().ToString();
+
+    await client.SendLookupPartyAsync(new LookupPartyRequest
+    {
+        RequestId = requestId,
+        PhoneNumber = "5512345678"
+    });
+
+    // La respuesta llega de forma asíncrona. Suscríbete al evento:
+    client.OnPartyLookupResponse += (response) =>
+    {
+        if (response.RequestId != requestId) return;
+
+        Console.WriteLine($"Beneficiario: {response.PartyName}");
+        Console.WriteLine($"Cuenta destino: {response.PartyId}");
+        Console.WriteLine($"Banco receptor: {response.FspId}");
+    };
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  Todas las operaciones son asíncronas sobre el stream persistente. Usa el campo `requestId` para correlacionar cada respuesta con su solicitud original, especialmente cuando haya múltiples operaciones concurrentes.
+</Aside>
+
+## Parámetros de la solicitud
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `requestId` | `string` | Identificador único de la solicitud (UUID). Nunca reutilices un `requestId`. |
+| `phoneNumber` | `string` | Número de celular del beneficiario. |
+
+## Respuesta exitosa
+
+Cuando el banco receptor confirma que la cuenta está activa, el Switch devuelve un mensaje `PartyLookupResponse` con los datos del beneficiario.
+
+```json
+{
+  "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "partyId": "0123456789",
+  "partyName": "María García López",
+  "fspId": "BANCOEJEMPLO"
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `requestId` | `string` | Correlaciona con la solicitud original. |
+| `partyId` | `string` | Identificador de la cuenta destino. |
+| `partyName` | `string` | Nombre del titular de la cuenta. |
+| `fspId` | `string` | Identificador del banco receptor. |
+
+Guarda `partyId` y `fspId` — son requeridos para el mensaje `ExecuteTransfer`.
+
+## Manejo de errores
+
+| Código | Descripción | Acción recomendada |
+|---|---|---|
+| `PARTY_NOT_FOUND` | El número de celular no corresponde a ninguna cuenta activa. | Informar al usuario y no continuar el flujo. |
+| `TIMEOUT` | No se recibió respuesta del banco receptor a tiempo. | Reintentar con un nuevo `requestId`. |
+
+<Aside type="caution">
+  Si la respuesta contiene un error, **no continúes** hacia `ExecuteTransfer`. Presentar datos de un beneficiario no resuelto puede resultar en una transferencia fallida o enviada a la cuenta incorrecta.
+</Aside>

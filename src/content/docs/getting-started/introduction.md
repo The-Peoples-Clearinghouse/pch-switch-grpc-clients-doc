@@ -1,6 +1,8 @@
 ---
 title: Introducción
 description: Introducción a la documentación de integración con vNext switch de la cámara de la gente.
+sidebar:
+  order: 1
 ---
 
 ## Modelo de Integración

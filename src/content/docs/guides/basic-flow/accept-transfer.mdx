@@ -1,0 +1,94 @@
+---
+title: Aceptar transferencia (AcceptTransfer)
+description: Cómo manejar la solicitud de aceptar una transferencia entrante como banco receptor.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando un participante actúa como banco receptor, el Switch le envía un mensaje `AcceptTransfer` solicitando que confirme si la cuenta destino puede recibir los fondos. El participante debe evaluar la cuenta y responder con `AcceptTransferResponse` dentro del tiempo límite.
+
+Este es el paso 9-11 del flujo de transferencia: ocurre después de que el banco emisor envía `ExecuteTransfer` y antes de que la transferencia sea definitiva.
+
+<Aside type="caution">
+  No responder dentro del tiempo límite equivale a rechazar la transferencia. El handler debe responder siempre, incluso cuando la cuenta no pueda recibir los fondos.
+</Aside>
+
+## Manejar la solicitud entrante
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    client.on('acceptTransfer', async (request) => {
+      const canAccept = await verificarCuentaDestino(request.partyId, request.amount);
+
+      await client.sendAcceptTransferResponse({
+        transferId: request.transferId,
+        accepted: canAccept,
+        errorCode: canAccept ? undefined : 'ACCOUNT_NOT_ACTIVE',
+      });
+    });
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    @Override
+    public void onAcceptTransfer(AcceptTransferRequest request) {
+        boolean canAccept = verificarCuentaDestino(
+            request.getPartyId(), request.getAmount());
+
+        AcceptTransferResponse response = AcceptTransferResponse.newBuilder()
+            .setTransferId(request.getTransferId())
+            .setAccepted(canAccept)
+            .setErrorCode(canAccept ? "" : "ACCOUNT_NOT_ACTIVE")
+            .build();
+
+        client.sendAcceptTransferResponse(response);
+    }
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    client.OnAcceptTransfer += async (request) =>
+    {
+        var canAccept = await VerificarCuentaDestinoAsync(request.PartyId, request.Amount);
+
+        await client.SendAcceptTransferResponseAsync(new AcceptTransferResponse
+        {
+            TransferId = request.TransferId,
+            Accepted = canAccept,
+            ErrorCode = canAccept ? null : "ACCOUNT_NOT_ACTIVE"
+        });
+    };
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`AcceptTransfer`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `transferId` | `string` | Identificador de la transferencia en la Cámara. |
+| `amount` | `string` | Monto a acreditar en la cuenta destino. |
+| `currency` | `string` | Código de moneda (e.g., `MXN`). |
+| `partyId` | `string` | Identificador de la cuenta destino en el banco receptor. |
+| `concept` | `string` | Concepto del pago. |
+
+## Respuesta (`AcceptTransferResponse`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `transferId` | `string` | Mismo `transferId` del mensaje recibido. |
+| `accepted` | `boolean` | `true` si la cuenta puede recibir los fondos, `false` en caso contrario. |
+| `errorCode` | `string` | Código de error cuando `accepted` es `false`. Omitir si `accepted` es `true`. |
+
+## Cuando la cuenta no puede recibir fondos
+
+Si la cuenta destino no está activa o no puede recibir el monto solicitado, responde con `accepted: false` e incluye un código de error descriptivo.
+
+| Código | Descripción |
+|---|---|
+| `ACCOUNT_NOT_ACTIVE` | La cuenta destino no está activa. |
+| `ACCOUNT_NOT_FOUND` | No se encontró una cuenta asociada al `partyId`. |
+| `AMOUNT_EXCEEDS_LIMIT` | El monto supera el límite de recepción configurado. |

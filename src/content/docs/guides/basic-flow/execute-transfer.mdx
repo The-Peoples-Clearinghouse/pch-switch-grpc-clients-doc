@@ -1,0 +1,149 @@
+---
+title: Ejecutar transferencia (ExecuteTransfer)
+description: Guía paso a paso para ejecutar una transferencia utilizando el cliente gRPC de PCH Switch.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+`ExecuteTransfer` es el mensaje que inicia el movimiento de fondos. Se envía una vez que el usuario ha confirmado el monto, concepto y factor de autenticación. El Switch procesa la solicitud, la enruta al banco receptor y devuelve el resultado cuando la transferencia es definitiva.
+
+Este paso requiere los datos del beneficiario obtenidos previamente con [`LookupParty`](/guides/basic-flow/lookup-party).
+
+![Flujo de transferencia](../../../../assets/transfer-flow.webp)
+
+## Enviar la solicitud
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    import { randomUUID } from 'crypto';
+
+    const requestId = randomUUID();
+
+    await client.sendExecuteTransfer({
+      requestId,
+      amount: '1500.00',
+      currency: 'MXN',
+      concept: 'Pago de servicios',
+      partyId: partyLookupResponse.partyId,
+      fspId: partyLookupResponse.fspId,
+    });
+
+    // La respuesta llega de forma asíncrona a través del stream.
+    client.on('executeTransferResponse', (response) => {
+      if (response.requestId !== requestId) return;
+
+      if (response.status === 'SUCCESS') {
+        console.log('Transferencia completada:', response.transferId);
+      } else {
+        console.error('Error:', response.errorCode, response.errorDescription);
+      }
+    });
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    String requestId = UUID.randomUUID().toString();
+
+    ExecuteTransferRequest request = ExecuteTransferRequest.newBuilder()
+        .setRequestId(requestId)
+        .setAmount("1500.00")
+        .setCurrency("MXN")
+        .setConcept("Pago de servicios")
+        .setPartyId(partyLookupResponse.getPartyId())
+        .setFspId(partyLookupResponse.getFspId())
+        .build();
+
+    client.sendExecuteTransfer(request);
+
+    // La respuesta llega de forma asíncrona. Implementa el handler:
+    @Override
+    public void onExecuteTransferResponse(ExecuteTransferResponse response) {
+        if (!response.getRequestId().equals(requestId)) return;
+
+        if (response.getStatus() == TransferStatus.SUCCESS) {
+            System.out.println("Transferencia completada: " + response.getTransferId());
+        } else {
+            System.err.println("Error: " + response.getErrorCode()
+                + " - " + response.getErrorDescription());
+        }
+    }
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    var requestId = Guid.NewGuid().ToString();
+
+    await client.SendExecuteTransferAsync(new ExecuteTransferRequest
+    {
+        RequestId = requestId,
+        Amount = "1500.00",
+        Currency = "MXN",
+        Concept = "Pago de servicios",
+        PartyId = partyLookupResponse.PartyId,
+        FspId = partyLookupResponse.FspId
+    });
+
+    // La respuesta llega de forma asíncrona. Suscríbete al evento:
+    client.OnExecuteTransferResponse += (response) =>
+    {
+        if (response.RequestId != requestId) return;
+
+        if (response.Status == TransferStatus.Success)
+            Console.WriteLine($"Transferencia completada: {response.TransferId}");
+        else
+            Console.Error.WriteLine($"Error: {response.ErrorCode} - {response.ErrorDescription}");
+    };
+    ```
+  </TabItem>
+</Tabs>
+
+## Parámetros de la solicitud
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `requestId` | `string` | Identificador único de la transferencia (UUID). Nunca reutilices un `requestId`. |
+| `amount` | `string` | Monto de la transferencia. |
+| `currency` | `string` | Código de moneda (e.g., `MXN`). |
+| `concept` | `string` | Concepto o descripción del pago. |
+| `partyId` | `string` | Identificador de la cuenta destino. Obtenido de `PartyLookupResponse`. |
+| `fspId` | `string` | Identificador del banco receptor. Obtenido de `PartyLookupResponse`. |
+
+## Respuesta exitosa
+
+Cuando el banco receptor acepta la transferencia, el Switch envía `ExecuteTransferResponse` con `status: SUCCESS`. En este punto la transferencia es **definitiva e irrevocable**.
+
+```json
+{
+  "requestId": "f3a1b2c4-e5d6-7890-abcd-ef1234567890",
+  "transferId": "TRF-20260330-00123",
+  "status": "SUCCESS",
+  "completedAt": "2026-03-30T14:32:10Z"
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `requestId` | `string` | Correlaciona con la solicitud original. |
+| `transferId` | `string` | Identificador único de la transferencia en la Cámara. |
+| `status` | `string` | `SUCCESS` o `ERROR`. |
+| `completedAt` | `string` | Fecha y hora de confirmación (ISO 8601). |
+
+<Aside type="note">
+  Registra el `transferId` para conciliación. Una vez recibido `SUCCESS`, la transferencia no puede revertirse a través de esta API.
+</Aside>
+
+## Manejo de errores
+
+| Código | Descripción | Acción recomendada |
+|---|---|---|
+| `INSUFFICIENT_FUNDS` | Fondos insuficientes en la cuenta origen. | Informar al usuario. |
+| `TRANSFER_REJECTED` | El banco receptor rechazó la transferencia. | Mostrar motivo si está disponible. |
+| `TIMEOUT` | No se recibió respuesta en el tiempo límite. | Reintentar con un nuevo `requestId`. |
+| `INVALID_AMOUNT` | El monto no cumple con los límites configurados. | Verificar rangos permitidos. |
+
+<Aside type="caution">
+  Nunca reutilices un `requestId`. Cada intento — incluyendo reintentos — debe usar un UUID nuevo. Reutilizar un `requestId` puede causar que el Switch rechace el mensaje o lo ignore silenciosamente.
+</Aside>

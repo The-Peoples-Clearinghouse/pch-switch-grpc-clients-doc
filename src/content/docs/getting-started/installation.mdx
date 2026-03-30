@@ -1,0 +1,68 @@
+---
+title: Instalación
+description: Requisitos y pasos de instalación del cliente gRPC de PCH Switch para TypeScript, Java y C#.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+La Cámara proporciona clientes gRPC listos para usar. No es necesario implementar la lógica de comunicación desde cero — solo instala el paquete correspondiente a tu lenguaje y configura las credenciales.
+
+## Requisitos previos
+
+Antes de instalar el cliente, asegúrate de contar con los tres archivos de certificados emitidos por la Cámara:
+
+- `participante.key` — clave privada del participante
+- `participante.pem` — certificado del participante
+- `hub-intermediate.pem` — certificado de la CA Intermedia
+
+Consulta la sección de [Seguridad](/getting-started/security) para más detalles sobre cómo obtenerlos.
+
+## Instalación
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    **Requisitos**
+
+    - Node.js 18 o superior
+    - npm o yarn
+
+    ```bash
+    npm install @pch/switch-client
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    **Requisitos**
+
+    - Java 11 o superior
+    - Maven o Gradle
+
+    **Maven**
+    ```xml
+    <dependency>
+      <groupId>mx.pch</groupId>
+      <artifactId>switch-client</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+    ```
+
+    **Gradle**
+    ```groovy
+    implementation 'mx.pch:switch-client:1.0.0'
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    **Requisitos**
+
+    - .NET 6 o superior
+
+    ```bash
+    dotnet add package Pch.SwitchClient
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  Reemplaza la versión por la más reciente indicada por la Cámara. Consulta la documentación de cada paquete para el historial de versiones.
+</Aside>
