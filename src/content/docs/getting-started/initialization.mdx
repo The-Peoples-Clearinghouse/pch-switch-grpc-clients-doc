@@ -2,30 +2,55 @@
 title: Inicialización del cliente
 description: Cómo configurar e inicializar el cliente gRPC de PCH Switch con los certificados y parámetros de conexión.
 sidebar:
-  order: 3
+  order: 4
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-El cliente gRPC requiere tres parámetros principales para establecer la conexión: el identificador del participante (`fspId`), la dirección del servidor, y los archivos de certificados. Una vez inicializado, el cliente establece el stream autenticado mediante `StartStream` antes de que puedas enviar cualquier operación.
+El cliente gRPC requiere tres parámetros principales para establecer la conexión: el identificador del participante (`fspId`), la dirección del servidor, y los archivos de certificados.
+Una vez inicializado, el cliente establece el stream autenticado mediante `StartStream` antes de que puedas enviar cualquier operación.
 
 ## Inicializar y conectar
 
 <Tabs syncKey="lenguaje">
   <TabItem label="TypeScript">
     ```typescript
-    import { SwitchClient } from '@pch/switch-client';
+    import {
+      GrpcSyncApiClient,
+      IGrpcClientSecurityOptions,
+      CryptoAndCertHelper,
+    } from "@pch-private/interop-apis-bc-grpc-sync-client-lib";
+    import { readFileSync } from "fs";
 
-    const client = new SwitchClient({
-      fspId: 'MIBANCO',
-      host: 'switch.camara.mx:443',
-      privateKeyPath: './certs/participante.key',
-      certificatePath: './certs/participante.pem',
-      caCertificatePath: './certs/hub-intermediate.pem',
-    });
+    const clientSecurityOptions: IGrpcClientSecurityOptions = {
+      mode: "SERVER_TLS",
+      caCertFilePath: "./certs/hub-intermediate.pem",
+      clientPrivateKeyFilePath: "./certs/participante.key",
+      clientCertFilePath: "./certs/participante.pem",
+    };
 
-    await client.connect();
-    console.log('Cliente conectado y autenticado');
+    // Lee el certificado del participante como texto PEM
+    const clientCertPem = readFileSync(
+      clientSecurityOptions.clientCertFilePath!,
+      "utf-8"
+    );
+
+    // CryptoAndCertHelper maneja la firma y validación criptográfica del flujo StartStream
+    const cryptoAndCertHelper = new CryptoAndCertHelper(
+      clientSecurityOptions.clientPrivateKeyFilePath!,
+      clientSecurityOptions.caCertFilePath!
+    );
+
+    const grpcClient = new GrpcSyncApiClient(
+      "switch.camara.mx:443",    // dirección del servidor gRPC
+      "MIBANCO",                 // fspId: debe coincidir con el del certificado
+      clientCertPem,
+      cryptoAndCertHelper,
+      clientSecurityOptions
+    );
+
+    await grpcClient.init();
+    console.log("Cliente conectado y autenticado");
     ```
   </TabItem>
   <TabItem label="Java">
@@ -63,7 +88,7 @@ El cliente gRPC requiere tres parámetros principales para establecer la conexi�
 </Tabs>
 
 <Aside type="note">
-  El método `connect` / `ConnectAsync` ejecuta internamente el flujo de autenticación `StartStream` — incluyendo el reto criptográfico. No es necesario implementarlo manualmente.
+  El método `init` ejecuta internamente el flujo de autenticación `StartStream` — incluyendo el reto criptográfico.
 </Aside>
 
 ## Parámetros de configuración
@@ -76,35 +101,32 @@ El cliente gRPC requiere tres parámetros principales para establecer la conexi�
 | `certificatePath` | Ruta al archivo `participante.pem`. |
 | `caCertificatePath` | Ruta al archivo `hub-intermediate.pem`. |
 
+## CryptoAndCertHelper
+
+`CryptoAndCertHelper` es la implementación de referencia proporcionada por la Cámara para el manejo criptográfico del flujo `StartStream`. Se encarga de firmar el reto enviado por el Switch y de validar la firma de respuesta del hub.
+
+El cliente acepta cualquier objeto que implemente la interfaz `ICryptoAndCertHelper`:
+
+```typescript
+export interface ICryptoAndCertHelper {
+  signString(stringToSign: string): Promise<string>;
+  validateSignature(
+    signedString: string,
+    signature: string,
+    pubKeyFingerprint: string
+  ): Promise<boolean>;
+}
+```
+
+La implementación de la Cámara cubre los dos métodos requeridos:
+
+- **`signString`** — Firma el reto con la llave privada del participante usando RSA + SHA-256. Devuelve la firma en Base64.
+- **`validateSignature`** — Verifica la firma del hub usando la llave pública extraída del certificado intermedio de la CA (`hub-intermediate.pem`). Antes de verificar, compara el fingerprint de la llave pública recibida contra el del certificado cargado; si no coinciden, rechaza la validación sin intentar verificar. La firma Base64 se decodifica como `binary` antes de pasarla al verificador.
+
+<Aside type="tip">
+  Puedes proporcionar tu propia implementación de `ICryptoAndCertHelper` si necesitas integrar con un HSM, un servicio de firma externo, o un algoritmo diferente. Solo asegúrate de que `signString` produzca una firma compatible con el algoritmo configurado en el Switch para tu participante.
+</Aside>
+
 ## Manejar desconexiones
 
 El cliente mantiene el stream activo, pero pueden ocurrir desconexiones por inactividad o errores de red. Registra un handler para reconectarte automáticamente.
-
-<Tabs syncKey="lenguaje">
-  <TabItem label="TypeScript">
-    ```typescript
-    client.on('disconnected', async (reason) => {
-      console.warn('Stream desconectado:', reason);
-      await client.connect();
-    });
-    ```
-  </TabItem>
-  <TabItem label="Java">
-    ```java
-    @Override
-    public void onDisconnected(String reason) {
-        System.out.println("Stream desconectado: " + reason);
-        client.connect();
-    }
-    ```
-  </TabItem>
-  <TabItem label="C#">
-    ```csharp
-    client.OnDisconnected += async (reason) =>
-    {
-        Console.WriteLine($"Stream desconectado: {reason}");
-        await client.ConnectAsync();
-    };
-    ```
-  </TabItem>
-</Tabs>

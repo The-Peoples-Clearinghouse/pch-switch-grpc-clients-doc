@@ -2,7 +2,7 @@
 title: Seguridad
 description: Infraestructura de certificados y flujo de autenticación para la integración con el Switch vNext de la Cámara de la Gente.
 sidebar:
-  order: 4
+  order: 2
 ---
 
 Este documento describe los mecanismos de seguridad que protegen la comunicación entre el core bancario y el Switch. Cubre la infraestructura de certificados (PKI), la configuración TLS del cliente gRPC y el protocolo de autenticación basado en reto criptográfico.
