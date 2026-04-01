@@ -1,5 +1,5 @@
 ---
-title: Consultar beneficiario (LookupParty)
+title: Consultar información de beneficiario
 description: Cómo consultar la información de un beneficiario por número de celular antes de iniciar una transferencia.
 sidebar:
   order: 1
@@ -16,23 +16,45 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
 <Tabs syncKey="lenguaje">
   <TabItem label="TypeScript">
     ```typescript
-    import { randomUUID } from 'crypto';
+    const request = new LookupPartyRequest();
+    request.setPartyid('5512345678');
+    request.setPartyidtype('MSISDN');
+    request.setPartysubidortype('');       // opcional
+    request.setCurrencycode('MXN');        // opcional
+    request.setOwnerfspid('BANCODESTINO'); // opcional
 
-    const requestId = randomUUID();
+    // Envía la solicitud al Switch
+    const grpcResponse = await grpcClient.partyLookup(request);
 
-    await client.sendLookupParty({
-      requestId,
-      phoneNumber: '5512345678',
-    });
+    // Maneja la respuesta:
+    const error = grpcResponse.getError();
+    if (error) {
+      console.error('Error del Switch:', error.getCode(), error.getMessage());
+      return;       // no continuar el flujo
+    }
 
-    // La respuesta llega de forma asíncrona a través del stream.
-    client.on('partyLookupResponse', (response) => {
-      if (response.requestId !== requestId) return;
+    const response = grpcResponse.getResponse();
+    if (!response) {
+      console.error('Respuesta vacía');
+      return;       // no continuar el flujo
+    }
 
-      console.log('Beneficiario:', response.partyName);
-      console.log('Cuenta destino:', response.partyId);
-      console.log('Banco receptor:', response.fspId);
-    });
+    const result = {
+      sourceFspId:      grpcResponse.getSourcefspid(),
+      destinationFspId: grpcResponse.getDestinationfspid(),
+      partyId:          response.getPartyid(),
+      partyIdType:      response.getPartyidtype(),
+      partySubIdOrType: response.getPartysubidortype() || undefined,
+      currencyCode:     response.getCurrencycode() || undefined,
+      firstName:        response.getFirstname() || undefined,
+      middleName:       response.getMiddlename() || undefined,
+      lastName:         response.getLastname() || undefined,
+      dateOfBirth:      response.getDateofbirth() || undefined,
+      extensions:       response.getExtensionsList().map(ext => ({
+        key: ext.getKey(),
+        value: ext.getValue(),
+      })),
+    };
     ```
   </TabItem>
   <TabItem label="Java">
@@ -80,40 +102,61 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
   </TabItem>
 </Tabs>
 
-<Aside type="note">
-  Todas las operaciones son asíncronas sobre el stream persistente. Usa el campo `requestId` para correlacionar cada respuesta con su solicitud original, especialmente cuando haya múltiples operaciones concurrentes.
-</Aside>
-
 ## Parámetros de la solicitud
 
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `requestId` | `string` | Identificador único de la solicitud (UUID). Nunca reutilices un `requestId`. |
-| `phoneNumber` | `string` | Número de celular del beneficiario. |
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `partyId` | `string` | Sí | Número de celular u otro identificador del beneficiario. |
+| `partyIdType` | `string` | Sí | Tipo de identificador. Usa `'MSISDN'` para número de celular. |
+| `partySubIdOrType` | `string` | No | Sub-identificador o tipo adicional. |
+| `currencyCode` | `string` | No | Moneda de la cuenta destino (ej. `'MXN'`). |
+| `ownerFspId` | `string` | No | FSP al que pertenece la cuenta destino, si se conoce de antemano. |
 
 ## Respuesta exitosa
 
-Cuando el banco receptor confirma que la cuenta está activa, el Switch devuelve un mensaje `PartyLookupResponse` con los datos del beneficiario.
+Cuando el banco receptor confirma que la cuenta está activa, el Switch devuelve un `LookupPartyResponse` con los datos del beneficiario en su campo `response`.
 
 ```json
 {
-  "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "partyId": "0123456789",
-  "partyName": "María García López",
-  "fspId": "BANCOEJEMPLO"
+  "sourceFspId": "MIBANCO",
+  "destinationFspId": "BANCOEJEMPLO",
+  "partyId": "5512345678",
+  "partyIdType": "MSISDN",
+  "firstName": "María",
+  "middleName": "García",
+  "lastName": "López",
+  "dateOfBirth": "1990-05-20",
+  "currencyCode": "MXN",
+  "extensions": []
 }
 ```
 
-| Campo | Tipo | Descripción |
+| Campo | Fuente | Descripción |
 |---|---|---|
-| `requestId` | `string` | Correlaciona con la solicitud original. |
-| `partyId` | `string` | Identificador de la cuenta destino. |
-| `partyName` | `string` | Nombre del titular de la cuenta. |
-| `fspId` | `string` | Identificador del banco receptor. |
+| `sourceFspId` | `grpcResponse` | FSP que origina la respuesta (tu banco). |
+| `destinationFspId` | `grpcResponse` | FSP del banco receptor del beneficiario. |
+| `partyId` | `response` | Identificador de la cuenta destino. |
+| `partyIdType` | `response` | Tipo de identificador de la cuenta destino. |
+| `partySubIdOrType` | `response` | Sub-identificador, si aplica. |
+| `currencyCode` | `response` | Moneda de la cuenta destino. |
+| `firstName` | `response` | Primer nombre del titular. |
+| `middleName` | `response` | Segundo nombre del titular. |
+| `lastName` | `response` | Apellido(s) del titular. |
+| `dateOfBirth` | `response` | Fecha de nacimiento del titular. |
+| `extensions` | `response` | Lista de pares clave-valor con datos adicionales. |
 
-Guarda `partyId` y `fspId` — son requeridos para el mensaje `ExecuteTransfer`.
+Guarda `partyId`, `partyIdType` y `destinationFspId` — son requeridos para el mensaje `ExecuteTransfer`.
 
 ## Manejo de errores
+
+Si el Switch no puede resolver la consulta, `grpcResponse.getError()` devuelve un objeto con `code` y `message`. De lo contrario devuelve `undefined`.
+
+```typescript
+const error = grpcResponse.getError();
+if (error) {
+  console.error(`[${error.getCode()}] ${error.getMessage()}`);
+}
+```
 
 | Código | Descripción | Acción recomendada |
 |---|---|---|
