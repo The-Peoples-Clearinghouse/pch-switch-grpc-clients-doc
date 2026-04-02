@@ -17,7 +17,7 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
   <TabItem label="TypeScript">
     ```typescript
     const request = new LookupPartyRequest();
-    request.setPartyid('5512345678');
+    request.setPartyid('10011110002');
     request.setPartyidtype('MSISDN');
     request.setPartysubidortype('');       // opcional
     request.setCurrencycode('MXN');        // opcional
@@ -112,6 +112,8 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
 | `currencyCode` | `string` | No | Moneda de la cuenta destino (ej. `'MXN'`). |
 | `ownerFspId` | `string` | No | FSP al que pertenece la cuenta destino, si se conoce de antemano. |
 
+Ver referencia completa: [LookupPartyRequest](/reference/lookup-party-request/)
+
 ## Respuesta exitosa
 
 Cuando el banco receptor confirma que la cuenta está activa, el Switch devuelve un `LookupPartyResponse` con los datos del beneficiario en su campo `response`.
@@ -147,6 +149,8 @@ Cuando el banco receptor confirma que la cuenta está activa, el Switch devuelve
 
 Guarda `partyId`, `partyIdType` y `destinationFspId` — son requeridos para el mensaje `ExecuteTransfer`.
 
+Ver referencia completa: [LookupPartyResponse](/reference/lookup-party-response/)
+
 ## Manejo de errores
 
 Si el Switch no puede resolver la consulta, `grpcResponse.getError()` devuelve un objeto con `code` y `message`. De lo contrario devuelve `undefined`.
@@ -158,10 +162,10 @@ if (error) {
 }
 ```
 
-| Código | Descripción | Acción recomendada |
+{/* | Código | Descripción | Acción recomendada |
 |---|---|---|
 | `PARTY_NOT_FOUND` | El número de celular no corresponde a ninguna cuenta activa. | Informar al usuario y no continuar el flujo. |
-| `TIMEOUT` | No se recibió respuesta del banco receptor a tiempo. | Reintentar con un nuevo `requestId`. |
+| `TIMEOUT` | No se recibió respuesta del banco receptor a tiempo. | Reintentar con un nuevo `requestId`. | */}
 
 <Aside type="caution">
   Si la respuesta contiene un error, **no continúes** hacia `ExecuteTransfer`. Presentar datos de un beneficiario no resuelto puede resultar en una transferencia fallida o enviada a la cuenta incorrecta.

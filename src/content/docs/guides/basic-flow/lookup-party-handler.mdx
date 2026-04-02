@@ -1,0 +1,113 @@
+---
+title: Responder consulta de beneficiario
+description: Cómo registrar un handler para responder a las consultas de información de beneficiario que el Switch envía a tu banco.
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando otro participante inicia un `LookupParty` hacia una cuenta en tu banco, el Switch te envía un mensaje `ServerPartyInfoRequest` para que confirmes si la cuenta existe y devuelvas los datos del titular.
+
+Para recibir estas solicitudes, debes registrar un **handler** (callback) en el cliente gRPC. El cliente invocará esta función cada vez que el Switch consulte información de un beneficiario en tu banco.
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si la cuenta no existe o no puede recibir fondos, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function partyLookupHandler(
+      request: ServerPartyInfoRequest,
+    ): Promise<LookupPartyResponse> {
+      const requestInfo = {
+        partyId:          request.getPartyid(),
+        partyIdType:      request.getPartyidtype(),
+        sourceFspId:      request.getSourcefspid(),
+        destinationFspId: request.getDestinationfspid(),
+      };
+
+      const response = new LookupPartyResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(requestInfo.destinationFspId);
+      // El destino de la respuesta es el banco que originó la consulta
+      response.setDestinationfspid(requestInfo.sourceFspId);
+
+      // Ejecuta reglas de negocio para verificar si la cuenta existe
+      if (!laCuentaExiste(requestInfo.partyId)) {
+        const errorResponse = new ErrorResponse();
+        errorResponse.setCode('PARTY_NOT_FOUND');
+        errorResponse.setMessage('No se encontró una cuenta asociada al identificador.');
+        response.setError(errorResponse);
+        return response;
+      }
+
+      // Construye la respuesta exitosa con los datos del titular
+      const partyResp = new LookupPartySuccessResponse();
+      partyResp.setPartyid(requestInfo.partyId);
+      partyResp.setPartyidtype(requestInfo.partyIdType);
+      partyResp.setFirstname('Juan');
+      partyResp.setMiddlename('Alberto');
+      partyResp.setLastname('Pérez');
+      partyResp.setDateofbirth('2001-03-20');
+      partyResp.setExtensionsList([]);
+      response.setResponse(partyResp);
+
+      return response;
+    }
+
+    // Registra el handler en el cliente gRPC
+    grpcClient.setPartyLookupHandlerFn(partyLookupHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerPartyInfoRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador de la cuenta a consultar (ej. número de celular). |
+| `partyIdType` | `string` | Tipo de identificador (ej. `'MSISDN'`). |
+| `sourceFspId` | `string` | FSP que origina la consulta (banco emisor). |
+| `destinationFspId` | `string` | FSP al que va dirigida la consulta (tu banco). |
+
+Ver referencia completa: [ServerPartyInfoRequest](/reference/server-party-info-request/)
+
+## Respuesta (`LookupPartyResponse`)
+
+La respuesta puede contener una respuesta exitosa (`response`) o un error (`error`), nunca ambos.
+
+**Campos de nivel superior**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `response` | `LookupPartySuccessResponse` | Datos del titular. Incluir si la cuenta existe. |
+| `error` | `ErrorResponse` | Incluir si la cuenta no existe o hay un error. |
+
+**LookupPartySuccessResponse**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `partyId` | `string` | Sí | Identificador de la cuenta (mismo que el recibido). |
+| `partyIdType` | `string` | Sí | Tipo de identificador (mismo que el recibido). |
+| `firstName` | `string` | Sí | Primer nombre del titular. |
+| `middleName` | `string` | No | Segundo nombre del titular. |
+| `lastName` | `string` | Sí | Apellido(s) del titular. |
+| `dateOfBirth` | `string` | No | Fecha de nacimiento (formato `YYYY-MM-DD`). |
+| `extensions` | `Extension[]` | No | Lista de pares clave-valor con datos adicionales. |
+
+Ver referencia completa: [LookupPartyResponse](/reference/lookup-party-response/)
+
+## Cuando la cuenta no existe
+
+Si el `partyId` no corresponde a ninguna cuenta en tu banco, incluye un `ErrorResponse` en la respuesta y omite el campo `response`.
+
+{/* | Código | Descripción |
+|---|---|
+| `PARTY_NOT_FOUND` | No se encontró una cuenta asociada al identificador. |
+| `ACCOUNT_NOT_ACTIVE` | La cuenta existe pero no está activa. | */}

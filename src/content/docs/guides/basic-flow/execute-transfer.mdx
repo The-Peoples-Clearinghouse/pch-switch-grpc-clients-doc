@@ -1,5 +1,5 @@
 ---
-title: Ejecutar transferencia (ExecuteTransfer)
+title: Ejecutar transferencia
 description: Guía paso a paso para ejecutar una transferencia utilizando el cliente gRPC de PCH Switch.
 sidebar:
   order: 2
@@ -18,29 +18,54 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
 <Tabs syncKey="lenguaje">
   <TabItem label="TypeScript">
     ```typescript
-    import { randomUUID } from 'crypto';
+    const txnType = new TransactionType();
+    txnType.setInitiator('PAYER');
+    txnType.setInitiatortype('CUSTOMER');
+    txnType.setScenario('TRANSFER');
+    txnType.setSubscenario('DOMESTIC');
 
-    const requestId = randomUUID();
+    const transferAmount = new Amount();
+    transferAmount.setAmount('10');
+    transferAmount.setCurrencycode('MXN');
 
-    await client.sendExecuteTransfer({
-      requestId,
-      amount: '1500.00',
-      currency: 'MXN',
-      concept: 'Pago de servicios',
-      partyId: partyLookupResponse.partyId,
-      fspId: partyLookupResponse.fspId,
-    });
+    const payer = new Party();
+    payer.setFspid('BANCOORIGEN');
+    payer.setIdtype('MSISDN');
+    payer.setIdvalue('1001110001');
 
-    // La respuesta llega de forma asíncrona a través del stream.
-    client.on('executeTransferResponse', (response) => {
-      if (response.requestId !== requestId) return;
+    const payee = new Party();
+    payee.setFspid('BANCODESTINO');     // id del banco beneficiario obtenido de LookupParty
+    payee.setIdtype('MSISDN');
+    payee.setIdvalue('10011110002');    // número de celular del beneficiario
 
-      if (response.status === 'SUCCESS') {
-        console.log('Transferencia completada:', response.transferId);
-      } else {
-        console.error('Error:', response.errorCode, response.errorDescription);
-      }
-    });
+    const transferRequest = new TransferRequest();
+    transferRequest.setAmount(transferAmount);
+    transferRequest.setFrom(payer);
+    transferRequest.setTo(payee);
+    transferRequest.setAmounttype('SEND');
+
+    const identificadorInternoUnico = crypto.randomUUID();
+    transferRequest.setHometransactionid(identificadorInternoUnico);
+
+    transferRequest.setNote('Pago de servicios');
+    transferRequest.setTransactiontype(txnType);
+    transferRequest.setThreeppienabled(false);
+
+    // Envía la solicitud al Switch
+    const grpcResponse = await grpcClient.executeTransfer(transferRequest);
+
+    // Maneja la respuesta:
+    const error = grpcResponse.getError();
+    if (error) {
+      console.error('Error del Switch:', error.getCode(), error.getMessage());
+      return; // no continuar el flujo
+    }
+
+    const success = grpcResponse.getSuccess();
+    const result = {
+      homeTransactionId: grpcResponse.getHometransactionid(),
+      transferId:        success?.getTransferid(),
+    };
     ```
   </TabItem>
   <TabItem label="Java">
@@ -102,48 +127,81 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
 
 ## Parámetros de la solicitud
 
+**TransferRequest**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `homeTransactionId` | `string` | Sí | Identificador único interno (UUID). Nunca reutilices el mismo valor. |
+| `amount` | `Amount` | Sí | Objeto con el monto y la moneda. |
+| `amountType` | `string` | Sí | Tipo de monto. Usa `'SEND'` para transferencias estándar. |
+| `from` | `Party` | Sí | Datos del ordenante (tu banco y cuenta). |
+| `to` | `Party` | Sí | Datos del beneficiario. Usa los valores obtenidos de `LookupParty`. |
+| `transactionType` | `TransactionType` | Sí | Categorización del tipo de transacción. |
+| `note` | `string` | No | Concepto o descripción del pago. |
+| `threeppiEnabled` | `boolean` | Sí | Indica si la transferencia usa flujo 3PPI. |
+
+**Amount**
+
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `requestId` | `string` | Identificador único de la transferencia (UUID). Nunca reutilices un `requestId`. |
-| `amount` | `string` | Monto de la transferencia. |
-| `currency` | `string` | Código de moneda (e.g., `MXN`). |
-| `concept` | `string` | Concepto o descripción del pago. |
-| `partyId` | `string` | Identificador de la cuenta destino. Obtenido de `PartyLookupResponse`. |
-| `fspId` | `string` | Identificador del banco receptor. Obtenido de `PartyLookupResponse`. |
+| `amount` | `string` | Monto como cadena (ej. `'10'`). |
+| `currencyCode` | `string` | Código de moneda (ej. `'MXN'`). |
+
+**Party**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `fspId` | `string` | Identificador del banco de la parte. |
+| `idType` | `string` | Tipo de identificador (ej. `'MSISDN'`). |
+| `idValue` | `string` | Valor del identificador (ej. número de celular). |
+
+**TransactionType**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `initiator` | `string` | Quién inicia la transacción (ej. `'PAYER'`). |
+| `initiatorType` | `string` | Tipo del iniciador (ej. `'CUSTOMER'`). |
+| `scenario` | `string` | Escenario de la transacción (ej. `'TRANSFER'`). |
+| `subScenario` | `string` | Sub-escenario (ej. `'DOMESTIC'`). |
+
+Ver referencia completa: [TransferRequest](/reference/transfer-request/)
 
 ## Respuesta exitosa
 
-Cuando el banco receptor acepta la transferencia, el Switch envía `ExecuteTransferResponse` con `status: SUCCESS`. En este punto la transferencia es **definitiva e irrevocable**.
+Cuando el banco receptor acepta la transferencia, el Switch devuelve un `TransferResponse` con el campo `success` poblado. En este punto la transferencia es **definitiva e irrevocable**.
 
 ```json
 {
-  "requestId": "f3a1b2c4-e5d6-7890-abcd-ef1234567890",
-  "transferId": "TRF-20260330-00123",
-  "status": "SUCCESS",
-  "completedAt": "2026-03-30T14:32:10Z"
+  "homeTransactionId": "f3a1b2c4-e5d6-7890-abcd-ef1234567890",
+  "transferId": "a7c9e2f1-3b84-4d56-91ab-cd7890ef1234"
 }
 ```
 
-| Campo | Tipo | Descripción |
+| Campo | Fuente | Descripción |
 |---|---|---|
-| `requestId` | `string` | Correlaciona con la solicitud original. |
-| `transferId` | `string` | Identificador único de la transferencia en la Cámara. |
-| `status` | `string` | `SUCCESS` o `ERROR`. |
-| `completedAt` | `string` | Fecha y hora de confirmación (ISO 8601). |
+| `homeTransactionId` | `grpcResponse` | Correlaciona con el identificador enviado en la solicitud. |
+| `transferId` | `success` | Identificador único asignado por la Cámara a la transferencia. |
 
 <Aside type="note">
-  Registra el `transferId` para conciliación. Una vez recibido `SUCCESS`, la transferencia no puede revertirse a través de esta API.
+  Registra el `transferId` para conciliación. Una vez recibido, la transferencia no puede revertirse a través de esta API.
 </Aside>
+
+Ver referencia completa: [TransferResponse](/reference/transfer-response/)
 
 ## Manejo de errores
 
-| Código | Descripción | Acción recomendada |
+Si el Switch rechaza la transferencia, `grpcResponse.getError()` devuelve un objeto con `code` y `message`. De lo contrario devuelve `undefined`.
+
+```typescript
+const error = grpcResponse.getError();
+if (error) {
+  console.error(`[${error.getCode()}] ${error.getMessage()}`);
+}
+```
+
+{/* | Código | Descripción | Acción recomendada |
 |---|---|---|
 | `INSUFFICIENT_FUNDS` | Fondos insuficientes en la cuenta origen. | Informar al usuario. |
 | `TRANSFER_REJECTED` | El banco receptor rechazó la transferencia. | Mostrar motivo si está disponible. |
 | `TIMEOUT` | No se recibió respuesta en el tiempo límite. | Reintentar con un nuevo `requestId`. |
-| `INVALID_AMOUNT` | El monto no cumple con los límites configurados. | Verificar rangos permitidos. |
-
-<Aside type="caution">
-  Nunca reutilices un `requestId`. Cada intento — incluyendo reintentos — debe usar un UUID nuevo. Reutilizar un `requestId` puede causar que el Switch rechace el mensaje o lo ignore silenciosamente.
-</Aside>
+| `INVALID_AMOUNT` | El monto no cumple con los límites configurados. | Verificar rangos permitidos. | */}
