@@ -1,0 +1,102 @@
+---
+title: Responder consulta de cuentas del cliente
+description: Cómo registrar un handler para responder a las consultas de cuentas de un cliente que el módulo 3ppi del Switch envía a tu banco.
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando un Cliente inicia el flujo de onboarding en una app PISP, el módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles mediante `GetCustomerAccounts`. Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi consulte las cuentas de un Cliente en tu banco.
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si el `partyId` no corresponde a ningún Cliente o no tiene cuentas disponibles, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function getCustomerAccountsHandler(
+      request: ServerGetCustomerAccountsRequest,
+    ): Promise<ServerGetCustomerAccountsResponse> {
+      const partyId          = request.getPartyid();
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const isOnboarding     = request.getIsonboarding();
+      const consentToken     = request.getConsenttoken();
+
+      // Obtener las cuentas del cliente según tu lógica de negocio
+      const cuentas = obtenerCuentasDelCliente(partyId);
+
+      const response = new ServerGetCustomerAccountsResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la consulta
+      response.setDestinationfspid(sourceFspId);
+      response.setPartyid(partyId);
+
+      if (!cuentas || cuentas.length === 0) {
+        const error = new ErrorResponse();
+        error.setCode('CUSTOMER_NOT_FOUND');
+        error.setMessage('No se encontraron cuentas asociadas al cliente.');
+        response.setError(error);
+        return response;
+      }
+
+      const accountList = cuentas.map(c => {
+        const account = new CustomerAccount();
+        account.setAccountid(c.id);
+        account.setAccountnickname(c.alias);
+        account.setCurrency(c.moneda);
+        account.setIsmainaccount(c.esPrincipal);
+        return account;
+      });
+      response.setAccountsList(accountList);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setGetCustomerAccountsHandlerFn(getCustomerAccountsHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerGetCustomerAccountsRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador del Cliente (ej. número de celular). |
+| `sourceFspId` | `string` | FSP que origina la consulta (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la consulta (tu banco). |
+| `isOnboarding` | `boolean` | Indica si la consulta es parte del flujo de onboarding inicial. |
+| `consentToken` | `string` | Token de consentimiento del Cliente. Puede estar vacío durante el onboarding inicial. |
+
+## Respuesta (`ServerGetCustomerAccountsResponse`)
+
+La respuesta puede contener una lista de cuentas (`accountsList`) o un error (`error`), nunca ambos.
+
+**Campos de nivel superior**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Identificador del Cliente (mismo que el recibido). |
+| `accountsList` | `CustomerAccount[]` | Lista de cuentas del Cliente. Incluir si el Cliente existe y tiene cuentas. |
+| `error` | `ErrorResponse` | Incluir si el Cliente no existe o no tiene cuentas disponibles. |
+
+**CustomerAccount**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `accountId` | `string` | Sí | Identificador único de la cuenta. |
+| `accountNickname` | `string` | No | Nombre o alias de la cuenta para mostrar al Cliente. |
+| `currency` | `string` | Sí | Moneda de la cuenta (ej. `'MXN'`). |
+| `isMainAccount` | `boolean` | No | Indica si esta es la cuenta principal del Cliente para operaciones PISP. |
+
+## Cuando el cliente no existe
+
+Si el `partyId` no corresponde a ningún Cliente en tu banco, o el Cliente no tiene cuentas disponibles para onboarding, incluye un `ErrorResponse` en la respuesta y omite el campo `accountsList`.

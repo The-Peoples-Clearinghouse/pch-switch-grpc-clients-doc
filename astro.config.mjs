@@ -21,9 +21,24 @@ export default defineConfig({
 							collapsed: false,
 						},
 						{
-							label: 'Flujo 3ppi',
-							autogenerate: { directory: 'guides/3ppi-flow' },
+							label: 'Flujo PISP',
 							collapsed: false,
+							items: [
+								{
+									label: 'Introducción',
+									link: '/guides/pisp-flow/introduction',
+								},
+								{
+									label: 'Dar de alta un cliente',
+									autogenerate: { directory: 'guides/pisp-flow/onboarding' },
+									collapsed: true,
+								},
+								{
+									label: 'Operaciones',
+									autogenerate: { directory: 'guides/pisp-flow/operations' },
+									collapsed: true,
+								}
+							],
 						},
 					],
 				},

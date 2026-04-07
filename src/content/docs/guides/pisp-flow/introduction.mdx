@@ -1,0 +1,41 @@
+---
+title: Introducción
+description: Introducción al flujo de integración con el Switch de la Cámara de la Gente para participantes de terceros (3PPI).
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+La funcionalidad **Payment Initiation Service Providers (PISP)** permite que aplicaciones de terceros, integradas al Switch a través del módulo 3ppi, realicen transferencias, consultas de saldo e historial de transacciones sobre las cuentas de los Clientes del Participante. De esta forma, un Cliente puede usar una app PISP para operar desde su cuenta, sin que dicha app esté integrada directamente con el core bancario del Participante, sino únicamente con el Switch.
+
+<Aside type="note">
+  Para poder utilizar la funcionalidad 3ppi, el Participante debe implementar métodos adicionales: tanto para el onboarding y offboarding de sus Clientes en la app PISP correspondiente, como para responder a los requests que el módulo 3ppi del Switch le envíe a nombre de esos Clientes.
+</Aside>
+
+## Consent Token
+
+Durante el onboarding de cada Cliente en una app PISP, el Participante debe generar un **Consent Token** (también llamado "secret consent"). Este token es un string único e irrepetible que identifica el consentimiento de un Cliente y queda asociado a sus cuentas.
+
+El Participante debe conservar el Consent Token de forma segura, ya que deberá utilizarlo para validar cada operación que el módulo 3ppi le solicite a nombre del Cliente correspondiente. Todas las operaciones 3ppi posteriores al onboarding incluirán este token.
+
+Recomendamos usar el estándar **UUID v4**, ya que garantiza unicidad a nivel global.
+
+## Métodos de onboarding
+
+Los métodos de onboarding buscan construir un flujo de autenticación seguro que permita obtener los datos esenciales de la cuenta o cuentas del Cliente que quedarán ligadas a la app PISP. A través de estos métodos, el módulo 3ppi puede solicitar al Participante:
+
+- El listado de cuentas del Cliente, para determinar cuál o cuáles se incorporarán al onboarding.
+- La generación de un OTP a enviar al dispositivo móvil del Cliente, para confirmar la posesión física del dispositivo.
+- La regeneración de OTPs en caso de que el primero no sea recibido por el Cliente.
+- La confirmación del onboarding exitoso, momento en el que el Participante emite el Consent Token.
+- La confirmación del offboarding de un Cliente, invalidando el Consent Token correspondiente.
+
+## Operaciones 3ppi
+
+Una vez completado el onboarding, los métodos de operación permiten al módulo 3ppi indicarle al Participante las acciones que el Cliente está solicitando desde la app PISP:
+
+- Consulta de saldo en las cuentas onboardeadas.
+- Consulta de historial de transacciones en la cuenta indicada.
+- Definición de la cuenta principal ("main account"), a la que se depositarán por default los fondos que el Cliente reciba a través del Switch.
+- Realización de una transferencia iniciada mediante PISP, ya sea hacia un Cliente en otro Participante o dentro del mismo Participante.
