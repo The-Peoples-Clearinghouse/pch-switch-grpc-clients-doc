@@ -23,58 +23,45 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
 <Tabs syncKey="lenguaje">
   <TabItem label="TypeScript">
     ```typescript
-    // Función que maneja la solicitud de aceptar transferencia entrante
     async function acceptTransferHandler(
       request: ServerAcceptTransferRequest,
     ): Promise<ServerAcceptTransferResponse> {
-      // Obtener los datos de la solicitud
-      const from = request.getFrom();
-		  const to = request.getTo();
-		  const amount = request.getAmount();
-		
-		  if (!from || !to || !amount) {
-			  throw new Error("Missing required fields in AcceptTransferRequest");
-		  }
+      const transferId        = request.getTransferid();
+      const homeTransactionId = request.getHometransactionid();
+      const threeppiEnabled   = request.getThreeppienabled();
+      const note              = request.getNote();
 
-		  const requestInfo = {
-			  transferid: request.getTransferid(),
-			  hometransactionid: request.getHometransactionid(),
-			  threeppienabled: request.getThreeppienabled(),
-			  from: {
-				  fspid: from.getFspid(),
-				  idtype: from.getIdtype(),
-				  idvalue: from.getIdvalue()
-			  },
-			  to: {
-				  fspid: to.getFspid(),
-				  idtype: to.getIdtype(),
-				  idvalue: to.getIdvalue()
-			  },
-			  amount: {
-				  amount: amount.getAmount(),
-				  currencycode: amount.getCurrencycode()
-			  },
-			  note: request.getNote() || ""
-		  };
-
-      // Responder la solicitud
       const response = new ServerAcceptTransferResponse();
+      response.setTransferid(transferId);
+      response.setHometransactionid(homeTransactionId);
+      response.setThreeppienabled(threeppiEnabled);
 
-      response.setTransferid(requestInfo.transferid);
-		  response.setHometransactionid(requestInfo.hometransactionid);
-		  response.setThreeppienabled(requestInfo.threeppienabled);
-      // El destino de la respuesta es el banco que inició la transferencia
-		  response.setDestinationfspid(requestInfo.from.fspid);
+      // from, to y amount son opcionales — verificar antes de usar
+      if (!request.hasFrom() || !request.hasTo() || !request.hasAmount()) {
+        const errorResponse = new ErrorResponse();
+        errorResponse.setCode('MISSING_REQUIRED_FIELDS');
+        errorResponse.setMessage('La solicitud no contiene los campos requeridos.');
+        response.setError(errorResponse);
+        return response;
+      }
+
+      const from   = request.getFrom();
+      const to     = request.getTo();
+      const amount = request.getAmount();
+
       // El origen de la respuesta es el banco receptor (el nuestro)
-		  response.setSourcefspid(requestInfo.to.fspid);
+      response.setSourcefspid(to.getFspid());
+      // El destino de la respuesta es el banco que inició la transferencia
+      response.setDestinationfspid(from.getFspid());
 
       // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
-      if (!laCuentaDestinoPuedeRecibirFondos(requestInfo)) {
+      if (!laCuentaDestinoPuedeRecibirFondos(to.getIdvalue(), amount.getAmount())) {
         const errorResponse = new ErrorResponse();
-        errorResponse.setCode("ACCOUNT_NOT_ACTIVE");
-        errorResponse.setMessage("La cuenta no está activa o no puede recibir fondos.");
+        errorResponse.setCode('ACCOUNT_NOT_ACTIVE');
+        errorResponse.setMessage('La cuenta no está activa o no puede recibir fondos.');
         response.setError(errorResponse);
-      } 
+        return response;
+      }
 
       // Actualizar los saldos del beneficiario
 
@@ -139,14 +126,14 @@ Ver referencia completa: [ServerAcceptTransferRequest](/pch-switch-grpc-clients-
 
 La respuesta indica al Switch si la transferencia fue aceptada. Si no se incluye `error`, la transferencia se considera aceptada. Si se incluye un `error`, la transferencia es rechazada.
 
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `transferId` | `string` | Mismo `transferId` del mensaje recibido. |
-| `homeTransactionId` | `string` | Mismo `homeTransactionId` del mensaje recibido. |
-| `sourceFspId` | `string` | FSP que origina la respuesta (el banco receptor, el nuestro). |
-| `destinationFspId` | `string` | FSP destino de la respuesta (el banco emisor). |
-| `threeppiEnabled` | `boolean` | Mismo valor recibido en la solicitud. |
-| `error` | `ErrorResponse` | Omitir para aceptar. Incluir con `code` y `message` para rechazar. |
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `transferId` | `string` | Sí | Mismo `transferId` del mensaje recibido. |
+| `homeTransactionId` | `string` | Sí | Mismo `homeTransactionId` del mensaje recibido. |
+| `sourceFspId` | `string` | Sí | FSP que origina la respuesta (el banco receptor, el nuestro). |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta (el banco emisor). |
+| `threeppiEnabled` | `boolean` | Sí | Mismo valor recibido en la solicitud. |
+| `error` | `ErrorResponse` | No | Omitir para aceptar. Incluir con `code` y `message` para rechazar. |
 
 Ver referencia completa: [ServerAcceptTransferResponse](/pch-switch-grpc-clients-doc/reference/server-accept-transfer-response/)
 

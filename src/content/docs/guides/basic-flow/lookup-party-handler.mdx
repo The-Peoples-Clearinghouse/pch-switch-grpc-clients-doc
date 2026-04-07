@@ -23,21 +23,19 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
     async function partyLookupHandler(
       request: ServerPartyInfoRequest,
     ): Promise<LookupPartyResponse> {
-      const requestInfo = {
-        partyId:          request.getPartyid(),
-        partyIdType:      request.getPartyidtype(),
-        sourceFspId:      request.getSourcefspid(),
-        destinationFspId: request.getDestinationfspid(),
-      };
+      const partyId          = request.getPartyid();
+      const partyIdType      = request.getPartyidtype();
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
 
       const response = new LookupPartyResponse();
       // La fuente de la respuesta es el banco receptor (el nuestro)
-      response.setSourcefspid(requestInfo.destinationFspId);
+      response.setSourcefspid(destinationFspId);
       // El destino de la respuesta es el banco que originó la consulta
-      response.setDestinationfspid(requestInfo.sourceFspId);
+      response.setDestinationfspid(sourceFspId);
 
       // Ejecuta reglas de negocio para verificar si la cuenta existe
-      if (!laCuentaExiste(requestInfo.partyId)) {
+      if (!laCuentaExiste(partyId)) {
         const errorResponse = new ErrorResponse();
         errorResponse.setCode('PARTY_NOT_FOUND');
         errorResponse.setMessage('No se encontró una cuenta asociada al identificador.');
@@ -47,8 +45,8 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
 
       // Construye la respuesta exitosa con los datos del titular
       const partyResp = new LookupPartySuccessResponse();
-      partyResp.setPartyid(requestInfo.partyId);
-      partyResp.setPartyidtype(requestInfo.partyIdType);
+      partyResp.setPartyid(partyId);
+      partyResp.setPartyidtype(partyIdType);
       partyResp.setFirstname('Juan');
       partyResp.setMiddlename('Alberto');
       partyResp.setLastname('Pérez');
@@ -82,12 +80,12 @@ La respuesta puede contener una respuesta exitosa (`response`) o un error (`erro
 
 **Campos de nivel superior**
 
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `sourceFspId` | `string` | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
-| `destinationFspId` | `string` | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
-| `response` | `LookupPartySuccessResponse` | Datos del titular. Incluir si la cuenta existe. |
-| `error` | `ErrorResponse` | Incluir si la cuenta no existe o hay un error. |
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `response` | `LookupPartySuccessResponse` | No | Datos del titular. Incluir si la cuenta existe. |
+| `error` | `ErrorResponse` | No | Incluir si la cuenta no existe o hay un error. |
 
 **LookupPartySuccessResponse**
 
