@@ -1,0 +1,87 @@
+---
+title: Dar de baja a un cliente
+description: Cómo registrar un handler para responder a las solicitudes de offboarding que el módulo 3ppi del Switch envía a tu banco.
+sidebar:
+  order: 5
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando un Cliente decide desvincular sus cuentas de una app PISP, el módulo 3ppi del Switch envía a tu banco una solicitud `OffboardAccount`. Tu banco debe invalidar el Consent Token asociado, revocando así el acceso de la app PISP a las cuentas del Cliente.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi solicite el offboarding de un Cliente en tu banco.
+
+<Aside type="note">
+  Al recibir esta solicitud, tu banco debe invalidar el Consent Token de forma que cualquier operación futura que lo incluya sea rechazada. El token no debe poder reutilizarse una vez invalidado.
+</Aside>
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si el `consentToken` no existe o ya fue invalidado previamente, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function offboardAccountHandler(
+      request: ServerOffboardAccountRequest,
+    ): Promise<ServerOffboardAccountResponse> {
+      const partyId          = request.getPartyid();
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const consentToken     = request.getConsenttoken();
+
+      const response = new ServerOffboardAccountResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setPartyid(partyId);
+
+      // Verifica que el consent token exista y esté activo
+      if (!consentTokenActivo(consentToken)) {
+        const error = new ErrorResponse();
+        error.setCode('CONSENT_TOKEN_NOT_FOUND');
+        error.setMessage('El consent token no existe o ya fue invalidado.');
+        response.setError(error);
+        return response;
+      }
+
+      // Invalida el consent token, revocando el acceso PISP a las cuentas del cliente
+      await invalidarConsentToken(consentToken);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setOffboardAccountRequestHandlerFn(offboardAccountHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerOffboardAccountRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador del Cliente (ej. número de celular). |
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `consentToken` | `string` | Consent Token a invalidar. |
+
+Ver referencia completa: [ServerOffboardAccountRequest](/reference/server-offboard-account-request/)
+
+## Respuesta (`ServerOffboardAccountResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Sí | Identificador del Cliente (mismo que el recibido). |
+| `error` | `ErrorResponse` | No | Incluir si el consent token no existe o ya fue invalidado. |
+
+Ver referencia completa: [ServerOffboardAccountResponse](/reference/server-offboard-account-response/)
+
+## Cuando el offboarding falla
+
+Si el `consentToken` no corresponde a ningún consentimiento activo, incluye un `ErrorResponse` en la respuesta.

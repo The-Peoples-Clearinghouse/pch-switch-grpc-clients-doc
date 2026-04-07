@@ -93,14 +93,14 @@ Ver referencia completa: [ServerInitiateOnboardRequest](/reference/server-initia
 
 ## Respuesta (`ServerInitiateOnboardResponse`)
 
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `sourceFspId` | `string` | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
-| `destinationFspId` | `string` | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
-| `partyId` | `string` | Identificador del Cliente (mismo que el recibido). |
-| `onboardRequestId` | `string` | Identificador de la solicitud (mismo que el recibido). |
-| `mainAccountId` | `string` | Identificador de la cuenta principal del Cliente para operaciones PISP. |
-| `error` | `ErrorResponse` | Incluir si no fue posible iniciar el onboarding. |
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Sí | Identificador del Cliente (mismo que el recibido). |
+| `onboardRequestId` | `string` | Sí | Identificador de la solicitud (mismo que el recibido). |
+| `mainAccountId` | `string` | Sí | Identificador de la cuenta principal del Cliente para operaciones PISP. |
+| `error` | `ErrorResponse` | No | Incluir si no fue posible iniciar el onboarding. |
 
 Ver referencia completa: [ServerInitiateOnboardResponse](/reference/server-initiate-onboard-response/)
 

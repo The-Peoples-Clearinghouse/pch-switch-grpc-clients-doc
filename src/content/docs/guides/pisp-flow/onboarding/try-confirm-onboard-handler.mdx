@@ -1,0 +1,101 @@
+---
+title: Confirmar onboarding de cliente
+description: Cómo registrar un handler para responder a las solicitudes de confirmación de onboarding que el módulo 3ppi del Switch envía a tu banco.
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Una vez que el Cliente ingresa el OTP en la app PISP, el módulo 3ppi del Switch envía a tu banco una solicitud `TryConfirmOnboard` con el código ingresado. Tu banco debe verificar que el OTP sea correcto y, si lo es, generar el Consent Token y ligarlo a las cuentas y tipos de acceso seleccionados durante el onboarding.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi intente confirmar el onboarding de un Cliente en tu banco.
+
+<Aside type="note">
+  Tu banco es responsable de:
+  - Verificar que el `otpToken` recibido coincida con el OTP almacenado para el `onboardRequestId` y que no haya expirado.
+  - Generar el Consent Token (se recomienda UUID v4) en caso de que el OTP sea válido.
+  - Almacenar la relación entre el Consent Token, las cuentas seleccionadas y los tipos de acceso del onboarding, para poder validar operaciones futuras.
+  - Invalidar el OTP una vez utilizado, independientemente del resultado.
+</Aside>
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si el OTP es incorrecto o ha expirado, responde con un `ErrorResponse`. No incluyas el `consentToken` en la respuesta en caso de error.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function tryConfirmOnboardHandler(
+      request: ServerTryConfirmOnboardRequest,
+    ): Promise<ServerTryConfirmOnboardResponse> {
+      const partyId          = request.getPartyid();
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const onboardRequestId = request.getOnboardrequestid();
+      const otpToken         = request.getOtptoken();
+
+      const response = new ServerTryConfirmOnboardResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setPartyid(partyId);
+      response.setOnboardrequestid(onboardRequestId);
+
+      // Verifica el OTP e invalídalo independientemente del resultado
+      const otpValido = verificarEInvalidarOtp(onboardRequestId, otpToken);
+
+      if (!otpValido) {
+        const error = new ErrorResponse();
+        error.setCode('INVALID_OTP');
+        error.setMessage('El OTP proporcionado es incorrecto o ha expirado.');
+        response.setError(error);
+        return response;
+      }
+
+      // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
+      // con las cuentas y tipos de acceso seleccionados durante el onboarding
+      const consentToken = generarYAlmacenarConsentToken(onboardRequestId);
+
+      response.setConsenttoken(consentToken);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setTryConfirmOnboardRequestHandlerFn(tryConfirmOnboardHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerTryConfirmOnboardRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador del Cliente (ej. número de celular). |
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `onboardRequestId` | `string` | Identificador del onboarding en curso. |
+| `otpToken` | `string` | Código OTP ingresado por el Cliente en la app PISP. |
+
+Ver referencia completa: [ServerTryConfirmOnboardRequest](/reference/server-try-confirm-onboard-request/)
+
+## Respuesta (`ServerTryConfirmOnboardResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Sí | Identificador del Cliente (mismo que el recibido). |
+| `onboardRequestId` | `string` | Sí | Identificador del onboarding (mismo que el recibido). |
+| `consentToken` | `string` | No | Consent Token generado por el banco. Solo presente si el OTP fue válido. |
+| `error` | `ErrorResponse` | No | Incluir si el OTP es incorrecto, ha expirado, o el onboarding no existe. |
+
+Ver referencia completa: [ServerTryConfirmOnboardResponse](/reference/server-try-confirm-onboard-response/)
+
+## Cuando el OTP no es válido
+
+Si el OTP es incorrecto o ha expirado, incluye un `ErrorResponse` en la respuesta y omite el campo `consentToken`. El OTP debe invalidarse en ambos casos.
