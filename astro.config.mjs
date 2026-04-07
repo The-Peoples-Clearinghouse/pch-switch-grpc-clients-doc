@@ -4,6 +4,8 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
+	site: 'https://The-Peoples-Clearinghouse.github.io',
+  base: 'pch-switch-grpc-clients-doc',
 	integrations: [
 		starlight({
 			title: "Integración CDG",

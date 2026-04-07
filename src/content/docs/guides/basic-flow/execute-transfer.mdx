@@ -9,7 +9,7 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 `ExecuteTransfer` es el mensaje que inicia el movimiento de fondos. Se envía una vez que el usuario ha confirmado el monto, concepto y factor de autenticación. El Switch procesa la solicitud, la enruta al banco receptor y devuelve el resultado cuando la transferencia es definitiva.
 
-Este paso requiere los datos del beneficiario obtenidos previamente con [`LookupParty`](/guides/basic-flow/lookup-party).
+Este paso requiere los datos del beneficiario obtenidos previamente con [`LookupParty`](/pch-switch-grpc-clients-doc/guides/basic-flow/lookup-party).
 
 ![Flujo de transferencia](../../../../assets/transfer-flow.webp)
 
@@ -164,7 +164,7 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
 | `scenario` | `string` | Escenario de la transacción (ej. `'TRANSFER'`). |
 | `subScenario` | `string` | Sub-escenario (ej. `'DOMESTIC'`). |
 
-Ver referencia completa: [TransferRequest](/reference/transfer-request/)
+Ver referencia completa: [TransferRequest](/pch-switch-grpc-clients-doc/reference/transfer-request/)
 
 ## Respuesta exitosa
 
@@ -186,7 +186,7 @@ Cuando el banco receptor acepta la transferencia, el Switch devuelve un `Transfe
   Registra el `transferId` para conciliación. Una vez recibido, la transferencia no puede revertirse a través de esta API.
 </Aside>
 
-Ver referencia completa: [TransferResponse](/reference/transfer-response/)
+Ver referencia completa: [TransferResponse](/pch-switch-grpc-clients-doc/reference/transfer-response/)
 
 ## Manejo de errores
 

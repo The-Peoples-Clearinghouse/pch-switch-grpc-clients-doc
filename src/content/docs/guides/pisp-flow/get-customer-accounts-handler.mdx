@@ -92,7 +92,7 @@ El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles
 | `isOnboarding` | `boolean` | Indica si la consulta es parte del flujo de onboarding inicial. |
 | `consentToken` | `string` _(opcional)_ | Token de consentimiento del Cliente. Solo presente en consultas fuera del onboarding. Usa `hasConsenttoken()` para verificar su existencia antes de llamar a `getConsenttoken()`. |
 
-Ver referencia completa: [ServerGetCustomerAccountsRequest](/reference/server-get-customer-accounts-request/)
+Ver referencia completa: [ServerGetCustomerAccountsRequest](/pch-switch-grpc-clients-doc/reference/server-get-customer-accounts-request/)
 
 ## Respuesta (`ServerGetCustomerAccountsResponse`)
 
@@ -117,7 +117,7 @@ La respuesta puede contener una lista de cuentas (`accountsList`) o un error (`e
 | `currency` | `string` | Sí | Moneda de la cuenta (ej. `'MXN'`). |
 | `isMainAccount` | `boolean` | Sí | Indica si esta es la cuenta principal del Cliente para operaciones PISP. |
 
-Ver referencia completa: [ServerGetCustomerAccountsResponse](/reference/server-get-customer-accounts-response/)
+Ver referencia completa: [ServerGetCustomerAccountsResponse](/pch-switch-grpc-clients-doc/reference/server-get-customer-accounts-response/)
 
 ## Cuando el cliente no existe
 

@@ -133,7 +133,7 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
 | `note` | `string` | Concepto del pago. |
 | `threeppiEnabled` | `boolean` | Indica si la transferencia usa flujo 3PPI. |
 
-Ver referencia completa: [ServerAcceptTransferRequest](/reference/server-accept-transfer-request/)
+Ver referencia completa: [ServerAcceptTransferRequest](/pch-switch-grpc-clients-doc/reference/server-accept-transfer-request/)
 
 ## Respuesta (`ServerAcceptTransferResponse`)
 
@@ -148,7 +148,7 @@ La respuesta indica al Switch si la transferencia fue aceptada. Si no se incluye
 | `threeppiEnabled` | `boolean` | Mismo valor recibido en la solicitud. |
 | `error` | `ErrorResponse` | Omitir para aceptar. Incluir con `code` y `message` para rechazar. |
 
-Ver referencia completa: [ServerAcceptTransferResponse](/reference/server-accept-transfer-response/)
+Ver referencia completa: [ServerAcceptTransferResponse](/pch-switch-grpc-clients-doc/reference/server-accept-transfer-response/)
 
 ## Cuando la cuenta no puede recibir fondos
 

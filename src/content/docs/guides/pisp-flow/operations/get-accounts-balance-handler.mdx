@@ -77,7 +77,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `consentToken` | `string` | Token de consentimiento del Cliente. Úsalo para verificar qué cuentas tiene autorizadas. |
 | `accountIdsList` | `string[]` | Lista de identificadores de cuentas cuyo saldo se solicita. |
 
-Ver referencia completa: [ServerGetAccountsBalanceRequest](/reference/server-get-accounts-balance-request/)
+Ver referencia completa: [ServerGetAccountsBalanceRequest](/pch-switch-grpc-clients-doc/reference/server-get-accounts-balance-request/)
 
 ## Respuesta (`ServerGetAccountsBalanceResponse`)
 
@@ -103,7 +103,7 @@ La respuesta puede contener la lista de saldos (`accountsList`) o un error (`err
 | `amount` | `string` | Sí | Saldo disponible en la cuenta. |
 | `isMainAccount` | `boolean` | Sí | Indica si es la cuenta principal del Cliente para operaciones PISP. |
 
-Ver referencia completa: [ServerGetAccountsBalanceResponse](/reference/server-get-accounts-balance-response/)
+Ver referencia completa: [ServerGetAccountsBalanceResponse](/pch-switch-grpc-clients-doc/reference/server-get-accounts-balance-response/)
 
 ## Cuando el consent token no es válido
 

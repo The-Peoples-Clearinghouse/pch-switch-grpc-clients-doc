@@ -23,7 +23,7 @@ El flujo involucra cuatro pasos en secuencia, con un paso opcional en caso de pr
 
 El módulo 3ppi solicita al banco la lista de cuentas disponibles del Cliente. El banco debe responder con todas las cuentas que el Cliente puede vincular, indicando cuál es la cuenta principal.
 
-→ Ver implementación: [Responder consulta de cuentas del cliente](/guides/pisp-flow/get-customer-accounts-handler/)
+→ Ver implementación: [Responder consulta de cuentas del cliente](/pch-switch-grpc-clients-doc/guides/pisp-flow/get-customer-accounts-handler/)
 
 ### Paso 2 — Inicio del onboarding
 
@@ -33,13 +33,13 @@ Con las cuentas seleccionadas por el Cliente en la app PISP, el módulo 3ppi not
 2. Generar un OTP y vincularlo al `onboardRequestId`.
 3. Enviar el OTP por SMS al número del Cliente.
 
-→ Ver implementación: [Iniciar onboarding de cliente](/guides/pisp-flow/onboarding/initiate-onboard-handler/)
+→ Ver implementación: [Iniciar onboarding de cliente](/pch-switch-grpc-clients-doc/guides/pisp-flow/onboarding/initiate-onboard-handler/)
 
 ### Paso 3 — Reenvío de OTP _(opcional)_
 
 Si el Cliente no recibe el SMS con el OTP, la app PISP puede solicitar uno nuevo. Este paso puede repetirse las veces que sea necesario antes de que el onboarding expire. El banco debe invalidar el OTP anterior y generar uno nuevo.
 
-→ Ver implementación: [Generar nuevo OTP](/guides/pisp-flow/onboarding/new-otp-token-handler/)
+→ Ver implementación: [Generar nuevo OTP](/pch-switch-grpc-clients-doc/guides/pisp-flow/onboarding/new-otp-token-handler/)
 
 ### Paso 4 — Confirmación del onboarding
 
@@ -51,7 +51,7 @@ El Cliente ingresa el OTP en la app PISP. El módulo 3ppi lo envía al banco par
 
 El Consent Token que se devuelve en este paso es el que acompañará todas las operaciones PISP futuras del Cliente.
 
-→ Ver implementación: [Confirmar onboarding de cliente](/guides/pisp-flow/onboarding/try-confirm-onboard-handler/)
+→ Ver implementación: [Confirmar onboarding de cliente](/pch-switch-grpc-clients-doc/guides/pisp-flow/onboarding/try-confirm-onboard-handler/)
 
 <Aside type="note">
   Al finalizar el paso 4, el proceso de onboarding está completo. El módulo pisp conserva el Consent Token y lo incluirá en todos los requests posteriores que realice a nombre del Cliente.
@@ -67,4 +67,4 @@ El offboarding ocurre cuando un Cliente decide desvincular sus cuentas de la app
 
 A diferencia del onboarding, el offboarding es un proceso de un solo paso: el banco invalida el Consent Token y confirma la operación.
 
-→ Ver implementación: [Dar de baja a un cliente](/guides/pisp-flow/onboarding/offboard-account-handler/)
+→ Ver implementación: [Dar de baja a un cliente](/pch-switch-grpc-clients-doc/guides/pisp-flow/onboarding/offboard-account-handler/)

@@ -81,7 +81,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `onboardRequestId` | `string` | Identificador del onboarding en curso. |
 | `otpToken` | `string` | Código OTP ingresado por el Cliente en la app PISP. |
 
-Ver referencia completa: [ServerTryConfirmOnboardRequest](/reference/server-try-confirm-onboard-request/)
+Ver referencia completa: [ServerTryConfirmOnboardRequest](/pch-switch-grpc-clients-doc/reference/server-try-confirm-onboard-request/)
 
 ## Respuesta (`ServerTryConfirmOnboardResponse`)
 
@@ -94,7 +94,7 @@ Ver referencia completa: [ServerTryConfirmOnboardRequest](/reference/server-try-
 | `consentToken` | `string` | No | Consent Token generado por el banco. Solo presente si el OTP fue válido. |
 | `error` | `ErrorResponse` | No | Incluir si el OTP es incorrecto, ha expirado, o el onboarding no existe. |
 
-Ver referencia completa: [ServerTryConfirmOnboardResponse](/reference/server-try-confirm-onboard-response/)
+Ver referencia completa: [ServerTryConfirmOnboardResponse](/pch-switch-grpc-clients-doc/reference/server-try-confirm-onboard-response/)
 
 ## Cuando el OTP no es válido
 

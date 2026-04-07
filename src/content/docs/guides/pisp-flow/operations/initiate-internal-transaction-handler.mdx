@@ -12,7 +12,7 @@ Cuando un Cliente inicia una transferencia hacia un beneficiario dentro del mism
 Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi solicite una transferencia interna a nombre de un Cliente en tu banco.
 
 <Aside type="note">
-  Este método es para transferencias **entre cuentas del mismo participante**. Para transferencias hacia otro participante, consulta [Realizar transferencia PISP](/guides/pisp-flow/operations/initiate-transaction-handler/).
+  Este método es para transferencias **entre cuentas del mismo participante**. Para transferencias hacia otro participante, consulta [Realizar transferencia PISP](/pch-switch-grpc-clients-doc/guides/pisp-flow/operations/initiate-transaction-handler/).
 </Aside>
 
 <Aside type="caution">
@@ -107,7 +107,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `threeppienabled` | `boolean` | Indica si la transacción fue iniciada mediante PISP. |
 | `transactionType` | `string` | Tipo de transacción. |
 
-Ver referencia completa: [ServerInitiateInternalTransactionRequest](/reference/server-initiate-internal-transaction-request/)
+Ver referencia completa: [ServerInitiateInternalTransactionRequest](/pch-switch-grpc-clients-doc/reference/server-initiate-internal-transaction-request/)
 
 ## Respuesta (`ServerInitiateInternalTransactionResponse`)
 
@@ -120,7 +120,7 @@ Ver referencia completa: [ServerInitiateInternalTransactionRequest](/reference/s
 | `transactionState` | `string` | Sí | Estado final de la transacción. |
 | `error` | `ErrorResponse` | No | Incluir si no fue posible ejecutar la transferencia. |
 
-Ver referencia completa: [ServerInitiateInternalTransactionResponse](/reference/server-initiate-internal-transaction-response/)
+Ver referencia completa: [ServerInitiateInternalTransactionResponse](/pch-switch-grpc-clients-doc/reference/server-initiate-internal-transaction-response/)
 
 ## Cuando la transferencia falla
 
