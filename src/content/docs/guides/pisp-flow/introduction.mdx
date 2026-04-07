@@ -13,6 +13,8 @@ La funcionalidad **Payment Initiation Service Providers (PISP)** permite que apl
   Para poder utilizar la funcionalidad 3ppi, el Participante debe implementar métodos adicionales: tanto para el onboarding y offboarding de sus Clientes en la app PISP correspondiente, como para responder a los requests que el módulo 3ppi del Switch le envíe a nombre de esos Clientes.
 </Aside>
 
+![Flujo pisp](../../../../assets/pisp-flow.webp)
+
 ## Consent Token
 
 Durante el onboarding de cada Cliente en una app PISP, el Participante debe generar un **Consent Token** (también llamado "secret consent"). Este token es un string único e irrepetible que identifica el consentimiento de un Cliente y queda asociado a sus cuentas.
