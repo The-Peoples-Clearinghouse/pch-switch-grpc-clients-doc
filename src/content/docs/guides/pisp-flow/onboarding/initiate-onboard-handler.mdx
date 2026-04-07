@@ -1,0 +1,109 @@
+---
+title: Iniciar onboarding de cliente
+description: Cómo registrar un handler para responder a las solicitudes de inicio de onboarding que el módulo 3ppi del Switch envía a tu banco.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Una vez que el Cliente selecciona las cuentas a onboardear en la app PISP, el módulo 3ppi del Switch envía a tu banco una solicitud `InitiateOnboard` para formalizar el inicio del proceso. Tu banco debe generar un OTP y enviárselo al Cliente por SMS a su número de teléfono, para confirmar la posesión del dispositivo móvil.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi inicie el onboarding de un Cliente en tu banco.
+
+<Aside type="note">
+  Tu banco es responsable de:
+  - Generar el OTP y enviarlo por SMS al número del Cliente (`partyId`).
+  - Almacenar la relación entre el `onboardRequestId` y el OTP generado, para poder validarlo en pasos posteriores.
+  - Gestionar el tiempo de vida del OTP. Se recomienda un máximo de **10 minutos**.
+</Aside>
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si el `onboardRequestId` no es válido o el `partyId` no corresponde a ningún Cliente, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function initiateOnboardHandler(
+      request: ServerInitiateOnboardRequest,
+    ): Promise<ServerInitiateOnboardResponse> {
+      const partyId               = request.getPartyid();
+      const sourceFspId           = request.getSourcefspid();
+      const destinationFspId      = request.getDestinationfspid();
+      const onboardRequestId      = request.getOnboardrequestid();
+      const accountAccessRequests = request.getAccountaccessrequestsList();
+
+      const response = new ServerInitiateOnboardResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setPartyid(partyId);
+      response.setOnboardrequestid(onboardRequestId);
+
+      // Valida que el cliente exista y las cuentas seleccionadas sean válidas
+      const resultado = iniciarOnboarding(partyId, onboardRequestId, accountAccessRequests);
+
+      if (!resultado.exitoso) {
+        const error = new ErrorResponse();
+        error.setCode('ONBOARD_FAILED');
+        error.setMessage('No fue posible iniciar el onboarding del cliente.');
+        response.setError(error);
+        return response;
+      }
+
+      // Genera el OTP, almacena la relación con el onboardRequestId
+      // y envíalo por SMS al número del cliente (partyId).
+      // Se recomienda que el OTP tenga un tiempo de vida máximo de 10 minutos.
+      await generarYEnviarOtp(partyId, onboardRequestId);
+
+      response.setMainaccountid(resultado.cuentaPrincipalId);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setInitiateOnboardRequestHandlerFn(initiateOnboardHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerInitiateOnboardRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador del Cliente (ej. número de celular). |
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `onboardRequestId` | `string` | Identificador único de la solicitud de onboarding. |
+| `accountAccessRequestsList` | `AccountAccessRequest[]` | Lista de cuentas seleccionadas por el Cliente para onboardear. |
+
+**AccountAccessRequest**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `accountId` | `string` | Identificador de la cuenta a onboardear. |
+| `accessTypesList` | `string[]` | Tipos de acceso solicitados para la cuenta (ej. lectura, transferencias). |
+| `currencyCode` | `string` | Moneda de la cuenta. |
+
+Ver referencia completa: [ServerInitiateOnboardRequest](/reference/server-initiate-onboard-request/)
+
+## Respuesta (`ServerInitiateOnboardResponse`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Identificador del Cliente (mismo que el recibido). |
+| `onboardRequestId` | `string` | Identificador de la solicitud (mismo que el recibido). |
+| `mainAccountId` | `string` | Identificador de la cuenta principal del Cliente para operaciones PISP. |
+| `error` | `ErrorResponse` | Incluir si no fue posible iniciar el onboarding. |
+
+Ver referencia completa: [ServerInitiateOnboardResponse](/reference/server-initiate-onboard-response/)
+
+## Cuando el onboarding falla
+
+Si el `partyId` no corresponde a ningún Cliente o el `onboardRequestId` no es válido, incluye un `ErrorResponse` en la respuesta y omite el campo `mainAccountId`.

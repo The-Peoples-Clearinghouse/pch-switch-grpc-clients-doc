@@ -2,12 +2,18 @@
 title: Responder consulta de cuentas del cliente
 description: Cómo registrar un handler para responder a las consultas de cuentas de un cliente que el módulo 3ppi del Switch envía a tu banco.
 sidebar:
-  order: 1
+  order: 2
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-Cuando un Cliente inicia el flujo de onboarding en una app PISP, el módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles mediante `GetCustomerAccounts`. Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi consulte las cuentas de un Cliente en tu banco.
+El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles mediante `GetCustomerAccounts`. Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi consulte las cuentas de un Cliente en tu banco.
+
+<Aside type="note">
+  Este método es utilizado en dos contextos distintos:
+  - **Onboarding:** el módulo 3ppi solicita todas las cuentas disponibles del Cliente para que este seleccione cuáles desea vincular a la app PISP. En este caso, el `consentToken` no está presente.
+  - **Operaciones normales:** el módulo 3ppi consulta las cuentas ya vinculadas al Cliente. En este caso, el `consentToken` es obligatorio y debe usarse para identificar qué cuentas están asociadas al consentimiento del Cliente.
+</Aside>
 
 <Aside type="caution">
   El handler debe responder siempre dentro del tiempo límite. Si el `partyId` no corresponde a ningún Cliente o no tiene cuentas disponibles, responde con un `ErrorResponse` en lugar de no responder.
@@ -25,10 +31,6 @@ Cuando un Cliente inicia el flujo de onboarding en una app PISP, el módulo 3ppi
       const sourceFspId      = request.getSourcefspid();
       const destinationFspId = request.getDestinationfspid();
       const isOnboarding     = request.getIsonboarding();
-      const consentToken     = request.getConsenttoken();
-
-      // Obtener las cuentas del cliente según tu lógica de negocio
-      const cuentas = obtenerCuentasDelCliente(partyId);
 
       const response = new ServerGetCustomerAccountsResponse();
       // La fuente de la respuesta es el banco receptor (el nuestro)
@@ -36,6 +38,22 @@ Cuando un Cliente inicia el flujo de onboarding en una app PISP, el módulo 3ppi
       // El destino de la respuesta es quien originó la consulta
       response.setDestinationfspid(sourceFspId);
       response.setPartyid(partyId);
+
+      // Si no es onboarding, el consent token es obligatorio
+      if (!isOnboarding && !request.hasConsenttoken()) {
+        const error = new ErrorResponse();
+        error.setCode('MISSING_CONSENT_TOKEN');
+        error.setMessage('Se requiere el consent token para operaciones fuera del onboarding.');
+        response.setError(error);
+        return response;
+      }
+
+      // Obtener cuentas según el tipo de solicitud:
+      // - Onboarding: todas las cuentas disponibles del cliente
+      // - Operación normal: solo las cuentas asociadas al consent token
+      const cuentas = isOnboarding
+        ? obtenerCuentasDelCliente(partyId)
+        : obtenerCuentasPorConsentToken(request.getConsenttoken());
 
       if (!cuentas || cuentas.length === 0) {
         const error = new ErrorResponse();
@@ -72,7 +90,9 @@ Cuando un Cliente inicia el flujo de onboarding en una app PISP, el módulo 3ppi
 | `sourceFspId` | `string` | FSP que origina la consulta (módulo 3ppi del Switch). |
 | `destinationFspId` | `string` | FSP al que va dirigida la consulta (tu banco). |
 | `isOnboarding` | `boolean` | Indica si la consulta es parte del flujo de onboarding inicial. |
-| `consentToken` | `string` | Token de consentimiento del Cliente. Puede estar vacío durante el onboarding inicial. |
+| `consentToken` | `string` _(opcional)_ | Token de consentimiento del Cliente. Solo presente en consultas fuera del onboarding. Usa `hasConsenttoken()` para verificar su existencia antes de llamar a `getConsenttoken()`. |
+
+Ver referencia completa: [ServerGetCustomerAccountsRequest](/reference/server-get-customer-accounts-request/)
 
 ## Respuesta (`ServerGetCustomerAccountsResponse`)
 
@@ -93,10 +113,12 @@ La respuesta puede contener una lista de cuentas (`accountsList`) o un error (`e
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
 | `accountId` | `string` | Sí | Identificador único de la cuenta. |
-| `accountNickname` | `string` | No | Nombre o alias de la cuenta para mostrar al Cliente. |
+| `accountNickname` | `string` | Sí | Nombre o alias de la cuenta para mostrar al Cliente. |
 | `currency` | `string` | Sí | Moneda de la cuenta (ej. `'MXN'`). |
-| `isMainAccount` | `boolean` | No | Indica si esta es la cuenta principal del Cliente para operaciones PISP. |
+| `isMainAccount` | `boolean` | Sí | Indica si esta es la cuenta principal del Cliente para operaciones PISP. |
+
+Ver referencia completa: [ServerGetCustomerAccountsResponse](/reference/server-get-customer-accounts-response/)
 
 ## Cuando el cliente no existe
 
-Si el `partyId` no corresponde a ningún Cliente en tu banco, o el Cliente no tiene cuentas disponibles para onboarding, incluye un `ErrorResponse` en la respuesta y omite el campo `accountsList`.
+Si el `partyId` no corresponde a ningún Cliente en tu banco, o el Cliente no tiene cuentas disponibles, incluye un `ErrorResponse` en la respuesta y omite el campo `accountsList`.

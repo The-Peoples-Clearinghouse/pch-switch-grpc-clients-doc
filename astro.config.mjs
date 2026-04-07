@@ -29,6 +29,10 @@ export default defineConfig({
 									link: '/guides/pisp-flow/introduction',
 								},
 								{
+									label: 'Consultar cuentas del cliente',
+									link: '/guides/pisp-flow/get-customer-accounts-handler',
+								},
+								{
 									label: 'Dar de alta un cliente',
 									autogenerate: { directory: 'guides/pisp-flow/onboarding' },
 									collapsed: true,
