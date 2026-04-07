@@ -1,0 +1,110 @@
+---
+title: Responder consulta de saldo
+description: Cómo registrar un handler para responder a las consultas de saldo de las cuentas de un cliente que el módulo 3ppi del Switch envía a tu banco.
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando un Cliente consulta el saldo de sus cuentas en una app PISP, el módulo 3ppi del Switch envía a tu banco una solicitud `GetAccountsBalance`. Tu banco debe responder con el saldo actual de cada cuenta solicitada.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi solicite el saldo de las cuentas de un Cliente en tu banco.
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Verifica que el `consentToken` sea válido y esté asociado a las cuentas solicitadas antes de devolver información de saldo. Si el token no es válido, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function getAccountsBalanceHandler(
+      request: ServerGetAccountsBalanceRequest,
+    ): Promise<ServerGetAccountsBalanceResponse> {
+      const partyId          = request.getPartyid();
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const consentToken     = request.getConsenttoken();
+      const accountIds       = request.getAccountidsList();
+
+      const response = new ServerGetAccountsBalanceResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setPartyid(partyId);
+
+      // Obtiene los saldos de las cuentas asociadas al consent token
+      const cuentas = obtenerSaldosPorConsentToken(consentToken, accountIds);
+
+      if (!cuentas || cuentas.length === 0) {
+        const error = new ErrorResponse();
+        error.setCode('ACCOUNTS_NOT_FOUND');
+        error.setMessage('No se encontraron cuentas asociadas al consent token proporcionado.');
+        response.setError(error);
+        return response;
+      }
+
+      const accountList = cuentas.map(c => {
+        const account = new CustomerAccountBalance();
+        account.setAccountid(c.id);
+        account.setAccountnickname(c.alias);
+        account.setCurrency(c.moneda);
+        account.setAmount(c.saldo);
+        account.setIsmainaccount(c.esPrincipal);
+        return account;
+      });
+      response.setAccountsList(accountList);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setGetAccountsBalanceRequestHandlerFn(getAccountsBalanceHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerGetAccountsBalanceRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador del Cliente (ej. número de celular). |
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `consentToken` | `string` | Token de consentimiento del Cliente. Úsalo para verificar qué cuentas tiene autorizadas. |
+| `accountIdsList` | `string[]` | Lista de identificadores de cuentas cuyo saldo se solicita. |
+
+Ver referencia completa: [ServerGetAccountsBalanceRequest](/reference/server-get-accounts-balance-request/)
+
+## Respuesta (`ServerGetAccountsBalanceResponse`)
+
+La respuesta puede contener la lista de saldos (`accountsList`) o un error (`error`), nunca ambos.
+
+**Campos de nivel superior**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Sí | Identificador del Cliente (mismo que el recibido). |
+| `accountsList` | `CustomerAccountBalance[]` | No | Lista de saldos. Incluir si el consent token es válido y existen cuentas. |
+| `error` | `ErrorResponse` | No | Incluir si el consent token no es válido o no se encontraron cuentas. |
+
+**CustomerAccountBalance**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `accountId` | `string` | Sí | Identificador de la cuenta. |
+| `accountNickname` | `string` | Sí | Nombre o alias de la cuenta. |
+| `currency` | `string` | Sí | Moneda de la cuenta (ej. `'MXN'`). |
+| `amount` | `string` | Sí | Saldo disponible en la cuenta. |
+| `isMainAccount` | `boolean` | Sí | Indica si es la cuenta principal del Cliente para operaciones PISP. |
+
+Ver referencia completa: [ServerGetAccountsBalanceResponse](/reference/server-get-accounts-balance-response/)
+
+## Cuando el consent token no es válido
+
+Si el `consentToken` no corresponde a ningún consentimiento activo o no tiene cuentas asociadas, incluye un `ErrorResponse` en la respuesta y omite el campo `accountsList`.

@@ -1,0 +1,101 @@
+---
+title: Establecer cuenta principal
+description: Cómo registrar un handler para responder a las solicitudes de cambio de cuenta principal que el módulo 3ppi del Switch envía a tu banco.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando un Cliente define o cambia su cuenta principal desde una app PISP, el módulo 3ppi del Switch envía a tu banco una solicitud `SetMainAccount`. La cuenta principal es a la que se depositarán por default los fondos que el Cliente reciba a través del Switch. Tu banco debe actualizar esta configuración y confirmar el cambio.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi solicite un cambio de cuenta principal para un Cliente en tu banco.
+
+<Aside type="caution">
+  Verifica que el `consentToken` sea válido y que la cuenta indicada esté asociada a dicho consentimiento antes de realizar el cambio. Si el token no es válido o la cuenta no existe, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function setMainAccountHandler(
+      request: ServerSetMainAccountRequest,
+    ): Promise<ServerSetMainAccountResponse> {
+      const partyId          = request.getPartyid();
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const accountId        = request.getAccountid();
+      const consentToken     = request.getConsenttoken();
+
+      const response = new ServerSetMainAccountResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setPartyid(partyId);
+      response.setAccountid(accountId);
+
+      // Verifica el consent token y actualiza la cuenta principal
+      const resultado = establecerCuentaPrincipal(consentToken, accountId);
+
+      if (!resultado.exitoso) {
+        const error = new ErrorResponse();
+        error.setCode('SET_MAIN_ACCOUNT_FAILED');
+        error.setMessage('No fue posible establecer la cuenta principal.');
+        response.setError(error);
+        return response;
+      }
+
+      const successResponse = new SetMainAccountSuccessResponse();
+      successResponse.setIsmainaccount(resultado.isMainAccount);
+      response.setSuccessresponse(successResponse);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setMainAccountHandlerFn(setMainAccountHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerSetMainAccountRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador del Cliente (ej. número de celular). |
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `accountId` | `string` | Identificador de la cuenta a establecer como principal. |
+| `consentToken` | `string` | Token de consentimiento del Cliente. |
+
+Ver referencia completa: [ServerSetMainAccountRequest](/reference/server-set-main-account-request/)
+
+## Respuesta (`ServerSetMainAccountResponse`)
+
+La respuesta puede contener una respuesta exitosa (`successResponse`) o un error (`error`), nunca ambos.
+
+**Campos de nivel superior**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Sí | Identificador del Cliente (mismo que el recibido). |
+| `accountId` | `string` | Sí | Identificador de la cuenta (mismo que el recibido). |
+| `successResponse` | `SetMainAccountSuccessResponse` | No | Confirmación del cambio. Incluir si la operación fue exitosa. |
+| `error` | `ErrorResponse` | No | Incluir si el consent token no es válido o la cuenta no existe. |
+
+**SetMainAccountSuccessResponse**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `isMainAccount` | `boolean` | Sí | Confirma que la cuenta fue establecida como principal. |
+
+Ver referencia completa: [ServerSetMainAccountResponse](/reference/server-set-main-account-response/)
+
+## Cuando el cambio falla
+
+Si el `consentToken` no es válido o la cuenta indicada no está asociada al consentimiento del Cliente, incluye un `ErrorResponse` en la respuesta y omite el campo `successResponse`.

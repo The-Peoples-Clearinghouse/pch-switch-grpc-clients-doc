@@ -1,0 +1,128 @@
+---
+title: Realizar transferencia PISP
+description: Cómo registrar un handler para responder a las solicitudes de transferencia hacia otro participante iniciadas desde una app PISP.
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando un Cliente inicia una transferencia hacia un beneficiario en otro participante desde una app PISP, el módulo 3ppi del Switch envía a tu banco una solicitud `InitiateTransaction`. Tu banco debe verificar el `consentToken`, debitar la cuenta del Cliente y ejecutar la transferencia hacia el Switch mediante el método [`ExecuteTransfer`](/guides/basic-flow/execute-transfer/).
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi solicite una transferencia a nombre de un Cliente en tu banco.
+
+<Aside type="note">
+  Este método es para transferencias **entre participantes distintos**. Para transferencias entre cuentas del mismo participante, consulta [Realizar transferencia PISP interna](/guides/pisp-flow/operations/initiate-internal-transaction-handler/).
+</Aside>
+
+<Aside type="caution">
+  Verifica que el `consentToken` sea válido y que la cuenta origen (`accountId`) esté asociada a dicho consentimiento antes de ejecutar el débito. Si el token no es válido, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function initiateTransactionHandler(
+      request: ServerInitiateTransactionRequest,
+    ): Promise<ServerInitiateTransactionResponse> {
+      const partyId          = request.getPartyid();
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const transactionId    = request.getTransactionid();
+      const payeeId          = request.getPayeeid();
+      const payeeFsp         = request.getPayeefsp();
+      const accountId        = request.getAccountid();
+      const consentToken     = request.getConsenttoken();
+      const currencyCode     = request.getCurrencycode();
+      const amount           = request.getAmount();
+      const note             = request.getNote();
+      const threeppienabled  = request.getThreeppienabled();
+      const transactionType  = request.getTransactiontype();
+
+      const response = new ServerInitiateTransactionResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setPartyid(partyId);
+      response.setTransactionid(transactionId);
+
+      // Verifica el consent token y que la cuenta esté autorizada
+      if (!consentTokenAutorizaCuenta(consentToken, accountId)) {
+        const error = new ErrorResponse();
+        error.setCode('UNAUTHORIZED');
+        error.setMessage('El consent token no autoriza operaciones sobre la cuenta indicada.');
+        response.setError(error);
+        return response;
+      }
+
+      // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
+      // Ver: /guides/basic-flow/execute-transfer/
+      const resultado = await ejecutarTransferencia({
+        transactionId,
+        payeeId,
+        payeeFsp,
+        accountId,
+        currencyCode,
+        amount,
+        note,
+        transactionType,
+      });
+
+      if (!resultado.exitoso) {
+        const error = new ErrorResponse();
+        error.setCode('TRANSFER_FAILED');
+        error.setMessage('No fue posible ejecutar la transferencia.');
+        response.setError(error);
+        return response;
+      }
+
+      response.setTransactionstate(resultado.estado);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setInitiateTransactionRequestHandlerFn(initiateTransactionHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerInitiateTransactionRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `partyId` | `string` | Identificador del Cliente pagador (ej. número de celular). |
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `transactionId` | `string` | Identificador único de la transacción. |
+| `payeeId` | `string` | Identificador del beneficiario. |
+| `payeeFsp` | `string` | FSP del beneficiario. |
+| `accountId` | `string` | Identificador de la cuenta origen del Cliente. |
+| `consentToken` | `string` | Token de consentimiento del Cliente. |
+| `currencyCode` | `string` | Moneda de la transferencia (ej. `'MXN'`). |
+| `amount` | `string` | Monto a transferir. |
+| `note` | `string` | Concepto o nota de la transferencia. |
+| `threeppienabled` | `boolean` | Indica si la transacción fue iniciada mediante PISP. |
+| `transactionType` | `string` | Tipo de transacción. |
+
+Ver referencia completa: [ServerInitiateTransactionRequest](/reference/server-initiate-transaction-request/)
+
+## Respuesta (`ServerInitiateTransactionResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `partyId` | `string` | Sí | Identificador del Cliente (mismo que el recibido). |
+| `transactionId` | `string` | Sí | Identificador de la transacción (mismo que el recibido). |
+| `transactionState` | `string` | Sí | Estado final de la transacción. |
+| `error` | `ErrorResponse` | No | Incluir si no fue posible ejecutar la transferencia. |
+
+Ver referencia completa: [ServerInitiateTransactionResponse](/reference/server-initiate-transaction-response/)
+
+## Cuando la transferencia falla
+
+Si el `consentToken` no es válido, la cuenta no tiene fondos suficientes, o el Switch rechaza la transferencia, incluye un `ErrorResponse` en la respuesta y omite el campo `transactionState`.
