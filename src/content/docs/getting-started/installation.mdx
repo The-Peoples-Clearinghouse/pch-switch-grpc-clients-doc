@@ -11,13 +11,17 @@ La Cámara proporciona clientes gRPC listos para usar. No es necesario implement
 
 ## Requisitos previos
 
-Antes de instalar el cliente, asegúrate de contar con los tres archivos de certificados emitidos por la Cámara:
+Antes de instalar el cliente, asegúrate de contar con:
 
-- `participante.key` — clave privada del participante
-- `participante.pem` — certificado del participante
-- `hub-intermediate.pem` — certificado de la CA Intermedia
+- Los tres archivos de certificados emitidos por la Cámara:
+  - `participante.key` — clave privada del participante
+  - `participante.pem` — certificado del participante
+  - `hub-intermediate.pem` — certificado de la CA Intermedia
 
-Consulta la sección de [Seguridad](/pch-switch-grpc-clients-doc/getting-started/security) para más detalles sobre cómo obtenerlos.
+  Consulta la sección de [Seguridad](/pch-switch-grpc-clients-doc/getting-started/security) para más detalles sobre cómo obtenerlos.
+
+- **Google Cloud CLI** instalada en tu entorno.
+- Una **cuenta de Google con acceso de lectura** al Artifact Registry de PCH, donde se distribuyen todos los clientes.
 
 ## Instalación
 
@@ -25,12 +29,37 @@ Consulta la sección de [Seguridad](/pch-switch-grpc-clients-doc/getting-started
   <TabItem label="TypeScript">
     **Requisitos**
 
-    - Node.js 18 o superior
+    - Node.js 20.0 o superior
     - npm, pnpm o yarn
+
+    **Paso 1 — Configurar el registro privado**
+
+    Agrega las siguientes líneas al archivo `.npmrc` en la raíz de tu proyecto (créalo si no existe):
+
+    ```ini
+    @pch-private:registry=https://us-central1-npm.pkg.dev/pch-main/pch-npm-private/
+    //us-central1-npm.pkg.dev/pch-main/pch-npm-private/:always-auth=true
+    ```
+
+    Esto indica a npm que los paquetes con el scope `@pch-private` deben descargarse desde el Artifact Registry de PCH.
+
+    **Paso 2 — Autenticarse con Google Artifact Registry**
+
+    ```bash
+    npx google-artifactregistry-auth
+    ```
+
+    Este comando usa tus credenciales de Google Cloud CLI para generar un token de acceso temporal al registro privado.
+
+    **Paso 3 — Instalar los paquetes**
 
     ```bash
     npm install @pch-private/interop-apis-bc-grpc-sync-client-lib
+    npm install @pch-private/interop-apis-bc-grpc-sync-public-lib
     ```
+
+    - `interop-apis-bc-grpc-sync-client-lib` — el cliente gRPC con todos los métodos para operar con el Switch.
+    - `interop-apis-bc-grpc-sync-public-lib` — los tipos e interfaces públicas compartidas.
   </TabItem>
   <TabItem label="Java">
     **Requisitos**
@@ -55,14 +84,92 @@ Consulta la sección de [Seguridad](/pch-switch-grpc-clients-doc/getting-started
   <TabItem label="C#">
     **Requisitos**
 
-    - .NET 6 o superior
+    - .NET 8 o superior
+
+    Los paquetes de C# se distribuyen en un repositorio **genérico** de Google Artifact Registry, por lo que NuGet no puede restaurarlos directamente desde la red. Es necesario descargarlos primero y configurar una fuente local.
+
+    **Paso 1 — Listar los archivos disponibles**
+
+    <Tabs syncKey="os">
+      <TabItem label="PowerShell">
+        ```powershell
+        gcloud artifacts files list --repository=external-clients --location=northamerica-south1 --project=pch-main
+        ```
+      </TabItem>
+      <TabItem label="Bash">
+        ```bash
+        gcloud artifacts files list --repository=external-clients --location=northamerica-south1 --project=pch-main
+        ```
+      </TabItem>
+    </Tabs>
+
+    **Paso 2 — Descargar los paquetes**
+
+    Descarga los archivos `.nupkg` en una carpeta local (por ejemplo `artifacts/nuget`). Reemplaza la versión por la indicada por la Cámara.
+
+    <Tabs syncKey="os">
+      <TabItem label="PowerShell">
+        ```powershell
+        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=.\artifacts\nuget --name=Pch.GrpcSyncApi.CSharp.Client.1.0.3.nupkg
+        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=.\artifacts\nuget --name=Pch.GrpcSyncApi.CSharp.Client.Crypto.1.0.3.nupkg
+        ```
+      </TabItem>
+      <TabItem label="Bash">
+        ```bash
+        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=./artifacts/nuget --name=Pch.GrpcSyncApi.CSharp.Client.1.0.3.nupkg
+        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=./artifacts/nuget --name=Pch.GrpcSyncApi.CSharp.Client.Crypto.1.0.3.nupkg
+        ```
+      </TabItem>
+    </Tabs>
+
+    **Paso 3 — Agregar la fuente local a NuGet**
+
+    Apunta NuGet a la carpeta donde descargaste los paquetes:
+
+    <Tabs syncKey="os">
+      <TabItem label="PowerShell">
+        ```powershell
+        dotnet nuget add source .\artifacts\nuget --name local-artifacts
+        ```
+      </TabItem>
+      <TabItem label="Bash">
+        ```bash
+        dotnet nuget add source ./artifacts/nuget --name local-artifacts
+        ```
+      </TabItem>
+    </Tabs>
+
+    Alternativamente, agrega la fuente en un archivo `NuGet.config` en la raíz del proyecto:
+
+    ```xml
+    <?xml version="1.0" encoding="utf-8"?>
+    <configuration>
+      <packageSources>
+        <clear />
+        <add key="local-artifacts" value="artifacts/nuget" />
+        <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+      </packageSources>
+    </configuration>
+    ```
+
+    **Paso 4 — Referenciar los paquetes en tu proyecto**
+
+    - `Pch.GrpcSyncApi.CSharp.Client` — el cliente gRPC. **Requerido.**
+    - `Pch.GrpcSyncApi.CSharp.Client.Crypto` — helper criptográfico para el flujo de autenticación. **Opcional** — omítelo si tu equipo ya cuenta con una implementación propia de `ICryptoAndCertHelper`.
 
     ```bash
-    dotnet add package Pch.SwitchClient
+    dotnet add <TU_PROYECTO>.csproj package Pch.GrpcSyncApi.CSharp.Client --version 1.0.3
+    dotnet add <TU_PROYECTO>.csproj package Pch.GrpcSyncApi.CSharp.Client.Crypto --version 1.0.3
+    ```
+
+    O directamente en el `.csproj`:
+
+    ```xml
+    <ItemGroup>
+      <PackageReference Include="Pch.GrpcSyncApi.CSharp.Client" Version="1.0.3" />
+      <!-- Opcional: omite si inyectas tu propia implementación de ICryptoAndCertHelper -->
+      <PackageReference Include="Pch.GrpcSyncApi.CSharp.Client.Crypto" Version="1.0.3" />
+    </ItemGroup>
     ```
   </TabItem>
 </Tabs>
-
-<Aside type="note">
-  Reemplaza la versión por la más reciente indicada por la Cámara. Consulta la documentación de cada paquete para el historial de versiones.
-</Aside>
