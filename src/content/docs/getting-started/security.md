@@ -52,7 +52,7 @@ Cada certificado de participante está vinculado a un `FspId` (identificador del
 
 Los clientes gRPC provistos por la Cámara ya implementan la lógica de conexión segura. El equipo del banco solo debe **suministrar los tres archivos de certificados** al inicializar el cliente.
 
-El cliente establece la conexión en modo seguro (TLS sobre HTTPS/2). La conexión sin TLS no está permitida.
+El cliente establece la conexión en modo seguro (HTTP/2 sobre TLS). La conexión sin TLS no está permitida.
 
 Al configurar el cliente, asegúrate de:
 

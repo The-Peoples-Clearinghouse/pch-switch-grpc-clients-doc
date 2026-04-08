@@ -73,38 +73,39 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     using Pch.GrpcSyncApi.CSharp.Client;
     using Pch.GrpcSyncApi.CSharp.Client.Crypto;
 
-    namespace PchGrpcSyncApiClient.Sample.Backend;
+    var clientCertPem = File.ReadAllText("./certs/participante.pem");
+    var clientPrivateKeyPem = File.ReadAllText("./certs/participante.key");
+    var caIntermediateCertPem = File.ReadAllText("./certs/hub-intermediate.pem");
 
-    var clientCertPem = File.ReadAllText('./certs/participante.pem');
-    var clientPrivateKeyPem = File.ReadAllText('./certs/participante.key');
-    var caIntermediateCertPem = File.ReadAllText('./certs/hub-intermediate.pem');
-    var cryptoHelper = new CryptoAndCertHelper(
-      clientPrivateKeyPem,
-      caIntermediateCertPem
+    var cryptoHelper = new CryptoAndCertHelper(clientPrivateKeyPem, caIntermediateCertPem);
+
+    var securityOptions = new GrpcSecurityOptions
+    {
+        Mode = GrpcSecurityMode.SERVER_TLS
+    };
+
+    var client = new GrpcSyncApiClient(
+        "switch.camara.mx:443",  // dirección del servidor gRPC
+        "MIBANCO",               // fspId: debe coincidir con el del certificado
+        clientCertPem,
+        clientPrivateKeyPem,
+        caIntermediateCertPem,
+        cryptoHelper,
+        securityOptions
     );
 
-    client = new GrpcSyncApiClient(
-      _url,
-      _fspId,
-      clientCertPem,
-      clientPrivateKeyPem,
-      caIntermediateCertPem,
-      cryptoHelper,
-      certsOptions
-    );
-
-    await _client.Init();
+    await client.Init();
     Console.WriteLine("Cliente conectado y autenticado");
     ```
   </TabItem>
 </Tabs>
 
 <Aside type="note">
-  El participante es responsable de leer y enviar el contenido de los archivos de certificados y llave privada.
+  El participante es responsable de leer y proporcionar el contenido de los archivos de certificados y llave privada.
 </Aside>
 
 <Aside type="note">
-  El método `init` ejecuta internamente el flujo de autenticación `StartStream` — incluyendo el reto criptográfico.
+  El método `init()` / `Init()` ejecuta internamente el flujo de autenticación `StartStream` — incluyendo el reto criptográfico.
 </Aside>
 
 ## Parámetros de configuración
