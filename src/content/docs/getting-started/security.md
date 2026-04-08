@@ -106,7 +106,7 @@ El cliente ya implementa el proceso de firma internamente. Los parámetros utili
 
 | Parámetro | Valor |
 |---|---|
-| Algoritmo | `SHA1withRSA` |
+| Algoritmo | `SHA256withRSA` |
 | Encoding del nonce | `ISO-8859-1` |
 | Formato de salida | Base64 estándar |
 

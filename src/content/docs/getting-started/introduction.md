@@ -7,49 +7,39 @@ sidebar:
 
 ## Modelo de Integración
 
-El Switch de la Cámara de la Gente expone un servidor gRPC con el cual se integra el core bancario mediante un cliente. La Cámara proporciona clientes listos para usar en los principales lenguajes de programación, por lo que no es necesario implementarlos desde cero.
-
-La comunicación entre el core bancario y el Switch es **bidireccional y persistente** mediante un stream:
+El Switch de la Cámara de la Gente expone un servidor gRPC —no una API REST— con el cual se integra el core bancario. La comunicación es **bidireccional y persistente** mediante un stream autenticado:
 
 ```
 Cliente (core bancario) ←—→ Servidor (switch)
 ```
 
-**Importante:** este modelo no es REST. No existe el concepto de "request aislado". Todas las operaciones ocurren dentro del contexto de una conexión autenticada y persistente.
+Esto significa que el cliente inicia la conexión, se autentica, y a partir de ese momento ambos lados pueden enviarse mensajes en cualquier momento.
 
-## Conceptos Basicos
+## El cliente
 
-### Comunicación mediante Stream
+La Cámara proporciona un cliente para los principales lenguajes de programación: una **clase** que abstrae y simplifica tanto la conexión con el servidor como el manejo de todas las peticiones, eliminando la necesidad de implementar la comunicación gRPC directamente.
 
-En lugar de realizar llamadas independientes, el cliente establece un stream persistente con el Switch que permanece abierto durante toda la sesión. Esto significa que:
+El cliente se compone de dos partes:
 
-- El cliente inicia el stream al conectarse y se autentica.
-- El cliente puede enviar mensajes al Switch en cualquier momento.
-- El Switch puede enviar mensajes al cliente asincrónicamente.
-- Ambos lados deben estar preparados para recibir mensajes en cualquier momento.
+### Peticiones que hace el cliente
 
-### Modelo evento-respuesta
+Son operaciones que el core bancario inicia hacia el Switch: consultas, transferencias, etc. Cada operación tiene un método correspondiente en la clase cliente que se puede invocar directamente.
 
-La comunicación sigue un patrón donde el Switch puede requerir respuestas del cliente en múltiples pasos. Por ejemplo, en una transferencia:
+### Peticiones que el Switch le hace al cliente
 
-1. El cliente inicia una transferencia.
-2. El Switch procesa y puede solicitar confirmaciones adicionales.
-3. El cliente responde a esos mensajes.
-4. La operación se completa tras múltiples intercambios.
+El Switch también puede enviar mensajes al cliente y esperar una respuesta. Para manejarlas, la clase cliente expone métodos `set` por cada tipo de petición. Cada uno de estos métodos recibe una función (callback) que será invocada cuando el Switch realice esa petición.
 
-Por ello, **una operación puede completarse en varios pasos**, no en una única llamada.
+```
+// Ejemplo conceptual
+cliente.setAcceptTransferRequest((peticion) => {
+  // lógica del core bancario
+  return respuesta;
+});
+```
 
 ## Características Técnicas
 
 - **Protocolo:** gRPC sobre TLS para comunicación segura.
 - **Autenticación:** mediante certificados proporcionados por la Cámara.
-- **Persistencia:** la conexión se mantiene abierta mediante un stream autenticado.
-- **Asincronía:** el cliente debe procesar mensajes del servidor en cualquier momento.
-
-## Lo que necesitas saber
-
-Los clientes ya están implementados, por lo que tu equipo debe:
-
-1. Usar el cliente proporcionado para tu lenguaje de programación.
-2. Mantener el stream activo y escuchando mensajes del servidor.
-3. Responder a los mensajes que el Switch envíe, especialmente aquellos que requieran confirmación.
+- **Comunicación:** bidireccional y persistente a través de un stream autenticado.
+- **Asincronía:** el Switch puede enviar mensajes al cliente en cualquier momento.
