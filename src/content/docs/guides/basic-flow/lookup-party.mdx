@@ -91,7 +91,7 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
     // request.CurrencyCode = "MXN";
 
     // Envía la solicitud al Switch
-    var grpcResponse = await _client.PartyLookup(request);
+    var grpcResponse = await grpcClient.PartyLookup(request);
 
     // Maneja la respuesta
     if (grpcResponse.Error is not null)

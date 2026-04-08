@@ -74,7 +74,7 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
   </TabItem>
   <TabItem label="C#">
     ```csharp
-    AcceptTransferHandlerDelegate acceptTransferHandler = (ServerAcceptTransferRequest request) =>
+    AcceptTransferHandlerDelegate acceptTransferHandler = async (ServerAcceptTransferRequest request) =>
     {
         var transferId        = request.TransferId;
         var homeTransactionId = request.HomeTransactionId;
@@ -96,7 +96,7 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
                 Code    = "MISSING_REQUIRED_FIELDS",
                 Message = "La solicitud no contiene los campos requeridos.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         // El origen de la respuesta es el banco receptor (el nuestro)
@@ -112,16 +112,16 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
                 Code    = "ACCOUNT_NOT_ACTIVE",
                 Message = "La cuenta no está activa o no puede recibir fondos.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         // Actualizar los saldos del beneficiario
 
-        return Task.FromResult(response);
+        return response;
     };
 
     // Registra el handler en el cliente gRPC
-    _client.setAcceptTransferHandler(acceptTransferHandler);
+    grpcClient.setAcceptTransferHandler(acceptTransferHandler);
     ```
   </TabItem>
 </Tabs>

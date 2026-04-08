@@ -132,7 +132,7 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
     };
 
     // Envía la solicitud al Switch
-    var grpcResponse = await _client.ExecuteTransfer(transferRequest);
+    var grpcResponse = await grpcClient.ExecuteTransfer(transferRequest);
 
     // Maneja la respuesta
     if (grpcResponse.Error is not null)

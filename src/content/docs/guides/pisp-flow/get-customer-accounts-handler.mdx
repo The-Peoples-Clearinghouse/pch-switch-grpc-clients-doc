@@ -83,7 +83,7 @@ El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles
   <TabItem label="C#">
     ```csharp
     GetCustomerAccountsHandlerDelegate getCustomerAccountsHandler =
-        (ServerGetCustomerAccountsRequest request) =>
+        async (ServerGetCustomerAccountsRequest request) =>
     {
         var partyId          = request.PartyId;
         var sourceFspId      = request.SourceFspId;
@@ -107,7 +107,7 @@ El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles
                 Code    = "MISSING_CONSENT_TOKEN",
                 Message = "Se requiere el consent token para operaciones fuera del onboarding.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         // Obtener cuentas según el tipo de solicitud:
@@ -124,7 +124,7 @@ El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles
                 Code    = "CUSTOMER_NOT_FOUND",
                 Message = "No se encontraron cuentas asociadas al cliente.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         foreach (var c in cuentas)
@@ -138,11 +138,11 @@ El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles
             });
         }
 
-        return Task.FromResult(response);
+        return response;
     };
 
     // Registrar el handler en el cliente gRPC
-    _client.setGetCustomerAccountsHandler(getCustomerAccountsHandler);
+    grpcClient.setGetCustomerAccountsHandler(getCustomerAccountsHandler);
     ```
   </TabItem>
 </Tabs>

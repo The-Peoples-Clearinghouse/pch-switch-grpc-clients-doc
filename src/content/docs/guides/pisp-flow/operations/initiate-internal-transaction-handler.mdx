@@ -90,7 +90,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
   <TabItem label="C#">
     ```csharp
     InitiateInternalTransactionRequestHandlerDelegate initiateInternalTransactionHandler =
-        (ServerInitiateInternalTransactionRequest request) =>
+        async (ServerInitiateInternalTransactionRequest request) =>
     {
         var partyId          = request.PartyId;
         var sourceFspId      = request.SourceFspId;
@@ -122,7 +122,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                 Code    = "UNAUTHORIZED",
                 Message = "El consent token no autoriza operaciones sobre la cuenta indicada.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         // Ejecuta la transferencia internamente en el core bancario,
@@ -137,16 +137,16 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                 Code    = "TRANSFER_FAILED",
                 Message = "No fue posible ejecutar la transferencia interna.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         response.TransactionState = resultado.Estado;
 
-        return Task.FromResult(response);
+        return response;
     };
 
     // Registrar el handler en el cliente gRPC
-    _client.setInitiateInternalTransactionRequestHandler(initiateInternalTransactionHandler);
+    grpcClient.setInitiateInternalTransactionRequestHandler(initiateInternalTransactionHandler);
     ```
   </TabItem>
 </Tabs>

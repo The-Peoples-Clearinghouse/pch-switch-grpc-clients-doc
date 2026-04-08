@@ -72,7 +72,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
   <TabItem label="C#">
     ```csharp
     InitiateOnboardRequestHandlerDelegate initiateOnboardHandler =
-        (ServerInitiateOnboardRequest request) =>
+        async (ServerInitiateOnboardRequest request) =>
     {
         var partyId               = request.PartyId;
         var sourceFspId           = request.SourceFspId;
@@ -100,7 +100,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                 Code    = "ONBOARD_FAILED",
                 Message = "No fue posible iniciar el onboarding del cliente.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         // Genera el OTP, almacena la relación con el onboardRequestId
@@ -110,11 +110,11 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 
         response.MainAccountId = resultado.CuentaPrincipalId;
 
-        return Task.FromResult(response);
+        return response;
     };
 
     // Registrar el handler en el cliente gRPC
-    _client.setInitiateOnboardRequestHandler(initiateOnboardHandler);
+    grpcClient.setInitiateOnboardRequestHandler(initiateOnboardHandler);
     ```
   </TabItem>
 </Tabs>

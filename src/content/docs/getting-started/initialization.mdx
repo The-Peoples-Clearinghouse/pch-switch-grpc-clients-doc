@@ -84,7 +84,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
         Mode = GrpcSecurityMode.SERVER_TLS
     };
 
-    var client = new GrpcSyncApiClient(
+    var grpcClient = new GrpcSyncApiClient(
         "switch.camara.mx:443",  // dirección del servidor gRPC
         "MIBANCO",               // fspId: debe coincidir con el del certificado
         clientCertPem,
@@ -94,7 +94,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
         securityOptions
     );
 
-    await client.Init();
+    await grpcClient.Init();
     Console.WriteLine("Cliente conectado y autenticado");
     ```
   </TabItem>

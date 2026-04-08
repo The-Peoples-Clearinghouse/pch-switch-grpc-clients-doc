@@ -90,7 +90,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
   <TabItem label="C#">
     ```csharp
     GetAccountTransactionsRequestHandlerDelegate getAccountTransactionsHandler =
-        (ServerGetAccountTransactionsRequest request) =>
+        async (ServerGetAccountTransactionsRequest request) =>
     {
         var partyId          = request.PartyId;
         var sourceFspId      = request.SourceFspId;
@@ -126,7 +126,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                 Code    = "ACCOUNT_NOT_FOUND",
                 Message = "No se encontró la cuenta asociada al consent token proporcionado.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         var successResponse = new GetAccountTransactionsSuccessResponse
@@ -151,11 +151,11 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 
         response.SuccessResponse = successResponse;
 
-        return Task.FromResult(response);
+        return response;
     };
 
     // Registrar el handler en el cliente gRPC
-    _client.setGetAccountTransactionsRequestHandler(getAccountTransactionsHandler);
+    grpcClient.setGetAccountTransactionsRequestHandler(getAccountTransactionsHandler);
     ```
   </TabItem>
 </Tabs>

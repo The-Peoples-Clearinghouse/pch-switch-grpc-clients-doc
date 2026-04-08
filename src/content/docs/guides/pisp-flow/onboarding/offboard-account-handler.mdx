@@ -61,7 +61,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
   <TabItem label="C#">
     ```csharp
     OffboardAccountRequestHandlerDelegate offboardAccountHandler =
-        (ServerOffboardAccountRequest request) =>
+        async (ServerOffboardAccountRequest request) =>
     {
         var partyId          = request.PartyId;
         var sourceFspId      = request.SourceFspId;
@@ -85,17 +85,17 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                 Code    = "CONSENT_TOKEN_NOT_FOUND",
                 Message = "El consent token no existe o ya fue invalidado.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         // Invalida el consent token, revocando el acceso PISP a las cuentas del cliente
         InvalidarConsentToken(consentToken);
 
-        return Task.FromResult(response);
+        return response;
     };
 
     // Registrar el handler en el cliente gRPC
-    _client.setOffboardAccountRequestHandler(offboardAccountHandler);
+    grpcClient.setOffboardAccountRequestHandler(offboardAccountHandler);
     ```
   </TabItem>
 </Tabs>

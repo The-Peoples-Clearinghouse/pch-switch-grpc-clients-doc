@@ -63,7 +63,7 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
   </TabItem>
   <TabItem label="C#">
     ```csharp
-    PartyLookupHandlerDelegate partyLookupHandler = (ServerPartyInfoRequest request) =>
+    PartyLookupHandlerDelegate partyLookupHandler = async (ServerPartyInfoRequest request) =>
     {
         var partyId          = request.PartyId;
         var partyIdType      = request.PartyIdType;
@@ -86,7 +86,7 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
                 Code    = "PARTY_NOT_FOUND",
                 Message = "No se encontró una cuenta asociada al identificador.",
             };
-            return Task.FromResult(response);
+            return response;
         }
 
         // Construye la respuesta exitosa con los datos del titular
@@ -100,11 +100,11 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
             DateOfBirth = "2001-03-20",
         };
 
-        return Task.FromResult(response);
+        return response;
     };
 
     // Registra el handler en el cliente gRPC
-    _client.setPartyLookupHandler(partyLookupHandler);
+    grpcClient.setPartyLookupHandler(partyLookupHandler);
     ```
   </TabItem>
 </Tabs>
