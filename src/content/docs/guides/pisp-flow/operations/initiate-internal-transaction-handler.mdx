@@ -87,6 +87,68 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setInitiateInternalTransactionRequestHandlerFn(initiateInternalTransactionHandler);
     ```
   </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    InitiateInternalTransactionRequestHandlerDelegate initiateInternalTransactionHandler =
+        (ServerInitiateInternalTransactionRequest request) =>
+    {
+        var partyId          = request.PartyId;
+        var sourceFspId      = request.SourceFspId;
+        var destinationFspId = request.DestinationFspId;
+        var transactionId    = request.TransactionId;
+        var payeeId          = request.PayeeId;
+        var accountId        = request.AccountId;
+        var consentToken     = request.ConsentToken;
+        var currencyCode     = request.CurrencyCode;
+        var amount           = request.Amount;
+        var note             = request.Note;
+        var transactionType  = request.TransactionType;
+
+        var response = new ServerInitiateInternalTransactionResponse
+        {
+            // La fuente de la respuesta es el banco receptor (el nuestro)
+            SourceFspId      = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId = sourceFspId,
+            PartyId          = partyId,
+            TransactionId    = transactionId,
+        };
+
+        // Verifica el consent token y que la cuenta esté autorizada
+        if (!ConsentTokenAutorizaCuenta(consentToken, accountId))
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "UNAUTHORIZED",
+                Message = "El consent token no autoriza operaciones sobre la cuenta indicada.",
+            };
+            return Task.FromResult(response);
+        }
+
+        // Ejecuta la transferencia internamente en el core bancario,
+        // sin pasar por el Switch
+        var resultado = EjecutarTransferenciaInterna(transactionId, payeeId,
+                                                     accountId, currencyCode, amount, note, transactionType);
+
+        if (!resultado.Exitoso)
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "TRANSFER_FAILED",
+                Message = "No fue posible ejecutar la transferencia interna.",
+            };
+            return Task.FromResult(response);
+        }
+
+        response.TransactionState = resultado.Estado;
+
+        return Task.FromResult(response);
+    };
+
+    // Registrar el handler en el cliente gRPC
+    _client.setInitiateInternalTransactionRequestHandler(initiateInternalTransactionHandler);
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerInitiateInternalTransactionRequest`)

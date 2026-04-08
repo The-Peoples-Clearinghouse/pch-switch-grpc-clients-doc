@@ -69,6 +69,49 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setTryConfirmOnboardRequestHandlerFn(tryConfirmOnboardHandler);
     ```
   </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    TryConfirmOnboardRequestHandlerDelegate tryConfirmOnboardHandler =
+        (ServerTryConfirmOnboardRequest request) =>
+    {
+        var partyId          = request.PartyId;
+        var sourceFspId      = request.SourceFspId;
+        var destinationFspId = request.DestinationFspId;
+        var onboardRequestId = request.OnboardRequestId;
+        var otpToken         = request.OtpToken;
+
+        var response = new ServerTryConfirmOnboardResponse
+        {
+            // La fuente de la respuesta es el banco receptor (el nuestro)
+            SourceFspId      = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId = sourceFspId,
+            PartyId          = partyId,
+            OnboardRequestId = onboardRequestId,
+        };
+
+        // Verifica el OTP e invalídalo independientemente del resultado
+        if (!VerificarEInvalidarOtp(onboardRequestId, otpToken))
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "INVALID_OTP",
+                Message = "El OTP proporcionado es incorrecto o ha expirado.",
+            };
+            return Task.FromResult(response);
+        }
+
+        // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
+        // con las cuentas y tipos de acceso seleccionados durante el onboarding
+        response.ConsentToken = GenerarYAlmacenarConsentToken(onboardRequestId);
+
+        return Task.FromResult(response);
+    };
+
+    // Registrar el handler en el cliente gRPC
+    _client.setTryConfirmOnboardRequestHandler(tryConfirmOnboardHandler);
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerTryConfirmOnboardRequest`)

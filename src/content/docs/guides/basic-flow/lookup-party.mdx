@@ -81,22 +81,42 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
   </TabItem>
   <TabItem label="C#">
     ```csharp
-    var requestId = Guid.NewGuid().ToString();
-
-    await client.SendLookupPartyAsync(new LookupPartyRequest
+    var request = new LookupPartyRequest
     {
-        RequestId = requestId,
-        PhoneNumber = "5512345678"
-    });
+        PartyId     = "10011110002",
+        PartyIdType = "MSISDN",
+    };
 
-    // La respuesta llega de forma asíncrona. Suscríbete al evento:
-    client.OnPartyLookupResponse += (response) =>
+    // CurrencyCode es opcional
+    // request.CurrencyCode = "MXN";
+
+    // Envía la solicitud al Switch
+    var grpcResponse = await _client.PartyLookup(request);
+
+    // Maneja la respuesta
+    if (grpcResponse.Error is not null)
     {
-        if (response.RequestId != requestId) return;
+        Console.Error.WriteLine($"Error del Switch: {grpcResponse.Error.Code} {grpcResponse.Error.Message}");
+        return; // no continuar el flujo
+    }
 
-        Console.WriteLine($"Beneficiario: {response.PartyName}");
-        Console.WriteLine($"Cuenta destino: {response.PartyId}");
-        Console.WriteLine($"Banco receptor: {response.FspId}");
+    var response = grpcResponse.Response;
+    if (response is null)
+    {
+        Console.Error.WriteLine("Respuesta vacía");
+        return; // no continuar el flujo
+    }
+
+    var result = new
+    {
+        SourceFspId      = grpcResponse.SourceFspId,
+        DestinationFspId = grpcResponse.DestinationFspId,
+        PartyId          = response.PartyId,
+        PartyIdType      = response.PartyIdType,
+        FirstName        = response.FirstName,
+        MiddleName       = response.MiddleName,
+        LastName         = response.LastName,
+        DateOfBirth      = response.DateOfBirth,
     };
     ```
   </TabItem>

@@ -64,6 +64,48 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setNewOtpTokenRequestHandlerFn(newOtpTokenHandler);
     ```
   </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    NewOtpTokenRequestHandlerDelegate newOtpTokenHandler =
+        (ServerNewOtpTokenRequest request) =>
+    {
+        var partyId          = request.PartyId;
+        var sourceFspId      = request.SourceFspId;
+        var destinationFspId = request.DestinationFspId;
+        var onboardRequestId = request.OnboardRequestId;
+
+        var response = new ServerNewOtpTokenResponse
+        {
+            // La fuente de la respuesta es el banco receptor (el nuestro)
+            SourceFspId      = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId = sourceFspId,
+            PartyId          = partyId,
+            OnboardRequestId = onboardRequestId,
+        };
+
+        // Verifica que el onboardRequestId corresponda a un onboarding en curso
+        if (!OnboardingEnCurso(onboardRequestId))
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "ONBOARD_REQUEST_NOT_FOUND",
+                Message = "No se encontró un onboarding en curso para el identificador proporcionado.",
+            };
+            return Task.FromResult(response);
+        }
+
+        // Invalida el OTP anterior, genera uno nuevo y envíalo por SMS al cliente.
+        // Reinicia el tiempo de vida del OTP (se recomienda máximo 10 minutos).
+        GenerarYEnviarNuevoOtp(partyId, onboardRequestId);
+
+        return Task.FromResult(response);
+    };
+
+    // Registrar el handler en el cliente gRPC
+    _client.setNewOtpTokenRequestHandler(newOtpTokenHandler);
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerNewOtpTokenRequest`)

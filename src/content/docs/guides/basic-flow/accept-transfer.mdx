@@ -72,36 +72,56 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
     grpcClient.setAcceptTransferHanderFn(acceptTransferHandler);
     ```
   </TabItem>
-  <TabItem label="Java">
-    ```java
-    @Override
-    public void onAcceptTransfer(AcceptTransferRequest request) {
-        boolean canAccept = verificarCuentaDestino(
-            request.getPartyId(), request.getAmount());
-
-        AcceptTransferResponse response = AcceptTransferResponse.newBuilder()
-            .setTransferId(request.getTransferId())
-            .setAccepted(canAccept)
-            .setErrorCode(canAccept ? "" : "ACCOUNT_NOT_ACTIVE")
-            .build();
-
-        client.sendAcceptTransferResponse(response);
-    }
-    ```
-  </TabItem>
   <TabItem label="C#">
     ```csharp
-    client.OnAcceptTransfer += async (request) =>
+    AcceptTransferHandlerDelegate acceptTransferHandler = (ServerAcceptTransferRequest request) =>
     {
-        var canAccept = await VerificarCuentaDestinoAsync(request.PartyId, request.Amount);
+        var transferId        = request.TransferId;
+        var homeTransactionId = request.HomeTransactionId;
+        var threeppiEnabled   = request.ThreeppiEnabled;
+        var note              = request.Note;
 
-        await client.SendAcceptTransferResponseAsync(new AcceptTransferResponse
+        var response = new ServerAcceptTransferResponse
         {
-            TransferId = request.TransferId,
-            Accepted = canAccept,
-            ErrorCode = canAccept ? null : "ACCOUNT_NOT_ACTIVE"
-        });
+            TransferId        = transferId,
+            HomeTransactionId = homeTransactionId,
+            ThreeppiEnabled   = threeppiEnabled,
+        };
+
+        // From, To y Amount son opcionales — verificar antes de usar
+        if (request.From is null || request.To is null || request.Amount is null)
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "MISSING_REQUIRED_FIELDS",
+                Message = "La solicitud no contiene los campos requeridos.",
+            };
+            return Task.FromResult(response);
+        }
+
+        // El origen de la respuesta es el banco receptor (el nuestro)
+        response.SourceFspId      = request.To.FspId;
+        // El destino de la respuesta es el banco que inició la transferencia
+        response.DestinationFspId = request.From.FspId;
+
+        // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
+        if (!LaCuentaDestinoPuedeRecibirFondos(request.To.IdValue, request.Amount.Amount_))
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "ACCOUNT_NOT_ACTIVE",
+                Message = "La cuenta no está activa o no puede recibir fondos.",
+            };
+            return Task.FromResult(response);
+        }
+
+        // Actualizar los saldos del beneficiario
+
+        return Task.FromResult(response);
     };
+
+    // Registra el handler en el cliente gRPC
+    _client.setAcceptTransferHandler(acceptTransferHandler);
     ```
   </TabItem>
 </Tabs>
