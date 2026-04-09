@@ -72,6 +72,49 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
     grpcClient.setAcceptTransferHanderFn(acceptTransferHandler);
     ```
   </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setAcceptTransferHandlerFn(req -> {
+        String  transferId        = req.getTransferId();
+        String  homeTransactionId = req.getHomeTransactionId();
+        boolean threeppiEnabled   = req.getThreeppiEnabled();
+
+        ServerAcceptTransferResponse.Builder response = ServerAcceptTransferResponse.newBuilder()
+                .setTransferId(transferId)
+                .setHomeTransactionId(homeTransactionId)
+                .setThreeppiEnabled(threeppiEnabled);
+
+        // From, To y Amount son opcionales — verificar antes de usar
+        if (!req.hasFrom() || !req.hasTo() || !req.hasAmount()) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("MISSING_REQUIRED_FIELDS")
+                            .setMessage("La solicitud no contiene los campos requeridos.")
+                            .build())
+                    .build();
+        }
+
+        // El origen de la respuesta es el banco receptor (el nuestro)
+        response.setSourceFspId(req.getTo().getFspId());
+        // El destino de la respuesta es el banco que inició la transferencia
+        response.setDestinationFspId(req.getFrom().getFspId());
+
+        // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
+        if (!laCuentaDestinoPuedeRecibirFondos(req.getTo().getIdValue(), req.getAmount().getAmount())) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("ACCOUNT_NOT_ACTIVE")
+                            .setMessage("La cuenta no está activa o no puede recibir fondos.")
+                            .build())
+                    .build();
+        }
+
+        // Actualizar los saldos del beneficiario
+
+        return response.build();
+    });
+    ```
+  </TabItem>
   <TabItem label="C#">
     ```csharp
     AcceptTransferHandlerDelegate acceptTransferHandler = async (ServerAcceptTransferRequest request) =>

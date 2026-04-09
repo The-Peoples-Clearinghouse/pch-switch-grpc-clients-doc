@@ -59,24 +59,33 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
   </TabItem>
   <TabItem label="Java">
     ```java
-    String requestId = UUID.randomUUID().toString();
-
     LookupPartyRequest request = LookupPartyRequest.newBuilder()
-        .setRequestId(requestId)
-        .setPhoneNumber("5512345678")
+        .setPartyId("10011110002")
+        .setPartyIdType("MSISDN")
+        // .setCurrencyCode("MXN")          // opcional
+        // .setOwnerFspId("BANCODESTINO")   // opcional
         .build();
 
-    client.sendLookupParty(request);
+    // Envía la solicitud al Switch
+    LookupPartyResponse grpcResponse = grpcClient.partyLookup(request);
 
-    // La respuesta llega de forma asíncrona. Implementa el handler:
-    @Override
-    public void onPartyLookupResponse(PartyLookupResponse response) {
-        if (!response.getRequestId().equals(requestId)) return;
-
-        System.out.println("Beneficiario: " + response.getPartyName());
-        System.out.println("Cuenta destino: " + response.getPartyId());
-        System.out.println("Banco receptor: " + response.getFspId());
+    // Maneja la respuesta
+    if (grpcResponse.hasError()) {
+        System.err.println("Error del Switch: "
+            + grpcResponse.getError().getCode() + " "
+            + grpcResponse.getError().getMessage());
+        return; // no continuar el flujo
     }
+
+    LookupPartySuccessResponse response = grpcResponse.getResponse();
+    String sourceFspId      = grpcResponse.getSourceFspId();
+    String destinationFspId = grpcResponse.getDestinationFspId();
+    String partyId          = response.getPartyId();
+    String partyIdType      = response.getPartyIdType();
+    String firstName        = response.getFirstName();
+    String middleName       = response.getMiddleName();
+    String lastName         = response.getLastName();
+    String dateOfBirth      = response.getDateOfBirth();
     ```
   </TabItem>
   <TabItem label="C#">

@@ -55,16 +55,45 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
   </TabItem>
   <TabItem label="Java">
     ```java
-    SwitchClient client = SwitchClient.builder()
-        .fspId("MIBANCO")
-        .host("switch.camara.mx")
-        .port(443)
-        .privateKeyPath("./certs/participante.key")
-        .certificatePath("./certs/participante.pem")
-        .caCertificatePath("./certs/hub-intermediate.pem")
-        .build();
+    import com.pch.grpc.application.GrpcSyncApiClient;
+    import com.pch.grpc.application.GrpcTlsSecurityMode;
+    import com.pch.grpc.application.IGrpcClientSecurityOptions;
+    import com.pch.grpc.infrastructure.security.CryptoAndCertHelper;
+    import java.nio.charset.StandardCharsets;
+    import java.nio.file.Files;
+    import java.nio.file.Paths;
 
-    client.connect();
+    String caCertPem = new String(
+      Files.readAllBytes(Paths.get("./certs/hub-intermediate.pem")),
+      StandardCharsets.UTF_8
+    );
+    String clientPrivateKey = new String(
+      Files.readAllBytes(Paths.get("./certs/participante.key")),
+      StandardCharsets.UTF_8
+    );
+    String clientCertPem = new String(
+      Files.readAllBytes(Paths.get("./certs/participante.pem")),
+      StandardCharsets.UTF_8
+    );
+
+    IGrpcClientSecurityOptions clientSecurityOptions = () -> GrpcTlsSecurityMode.SERVER_TLS;
+
+    // CryptoAndCertHelper maneja la firma y validación criptográfica del flujo StartStream
+    CryptoAndCertHelper cryptoHelper = new CryptoAndCertHelper(clientPrivateKey, caCertPem);
+
+    GrpcSyncApiClient grpcClient = new GrpcSyncApiClient(
+        "switch.camara.mx:443",  // dirección del servidor gRPC
+        "MIBANCO",               // fspId: debe coincidir con el del certificado
+        clientCertPem,
+        clientPrivateKey,
+        caCertPem,
+        cryptoHelper,
+        clientSecurityOptions
+    );
+
+    if (!grpcClient.init()) {
+        throw new RuntimeException("No se pudo abrir el stream o autenticar");
+    }
     System.out.println("Cliente conectado y autenticado");
     ```
   </TabItem>

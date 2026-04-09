@@ -58,6 +58,35 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setOffboardAccountRequestHandlerFn(offboardAccountHandler);
     ```
   </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setOffboardAccountRequestHandlerFn(req -> {
+        String partyId          = req.getPartyId();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId = req.getSourceFspId();
+
+        ServerOffboardAccountResponse.Builder response = ServerOffboardAccountResponse.newBuilder()
+                .setSourceFspId(sourceFspId)
+                .setDestinationFspId(destinationFspId)
+                .setPartyId(partyId);
+
+        // Verifica que el consent token exista y esté activo
+        // Invalida el consent token, revocando el acceso PISP a las cuentas del cliente
+        if (!revocarConsentimiento(partyId)) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("OFFBOARD_FAILED")
+                            .setMessage("No fue posible revocar el consentimiento del cliente.")
+                            .build())
+                    .build();
+        }
+
+        return response.build();
+    });
+    ```
+  </TabItem>
   <TabItem label="C#">
     ```csharp
     OffboardAccountRequestHandlerDelegate offboardAccountHandler =

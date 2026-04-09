@@ -69,6 +69,43 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setTryConfirmOnboardRequestHandlerFn(tryConfirmOnboardHandler);
     ```
   </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setTryConfirmOnboardRequestHandlerFn(req -> {
+        String partyId          = req.getPartyId();
+        String onboardRequestId = req.getOnboardRequestId();
+        String otpToken         = req.getOtpToken();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId = req.getSourceFspId();
+
+        ServerTryConfirmOnboardResponse.Builder response = ServerTryConfirmOnboardResponse.newBuilder()
+                .setSourceFspId(sourceFspId)
+                .setDestinationFspId(destinationFspId)
+                .setOnboardRequestId(onboardRequestId)
+                .setPartyId(partyId);
+
+        // Verifica el OTP e invalídalo independientemente del resultado
+        if (!esOtpValido(onboardRequestId, otpToken)) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("INVALID_OTP")
+                            .setMessage("El OTP proporcionado no es válido o ha expirado.")
+                            .build())
+                    .build();
+        }
+
+        // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
+        // con las cuentas y tipos de acceso seleccionados durante el onboarding
+        String consentToken = "consent-" + UUID.randomUUID().toString().replace("-", "");
+
+        return response
+                .setConsentToken(consentToken)
+                .build();
+    });
+    ```
+  </TabItem>
   <TabItem label="C#">
     ```csharp
     TryConfirmOnboardRequestHandlerDelegate tryConfirmOnboardHandler =

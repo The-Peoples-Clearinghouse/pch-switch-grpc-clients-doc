@@ -70,31 +70,57 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
   </TabItem>
   <TabItem label="Java">
     ```java
-    String requestId = UUID.randomUUID().toString();
-
-    ExecuteTransferRequest request = ExecuteTransferRequest.newBuilder()
-        .setRequestId(requestId)
-        .setAmount("1500.00")
-        .setCurrency("MXN")
-        .setConcept("Pago de servicios")
-        .setPartyId(partyLookupResponse.getPartyId())
-        .setFspId(partyLookupResponse.getFspId())
+    TransactionType txnType = TransactionType.newBuilder()
+        .setInitiator("PAYER")
+        .setInitiatorType("CUSTOMER")
+        .setScenario("TRANSFER")
+        .setSubScenario("DOMESTIC")
         .build();
 
-    client.sendExecuteTransfer(request);
+    Amount transferAmount = Amount.newBuilder()
+        .setAmount("10")
+        .setCurrencyCode("MXN")
+        .build();
 
-    // La respuesta llega de forma asíncrona. Implementa el handler:
-    @Override
-    public void onExecuteTransferResponse(ExecuteTransferResponse response) {
-        if (!response.getRequestId().equals(requestId)) return;
+    Party payer = Party.newBuilder()
+        .setFspId("BANCOORIGEN")
+        .setIdType("MSISDN")
+        .setIdValue("1001110001")
+        .build();
 
-        if (response.getStatus() == TransferStatus.SUCCESS) {
-            System.out.println("Transferencia completada: " + response.getTransferId());
-        } else {
-            System.err.println("Error: " + response.getErrorCode()
-                + " - " + response.getErrorDescription());
-        }
+    Party payee = Party.newBuilder()
+        .setFspId("BANCODESTINO")   // banco beneficiario obtenido de LookupParty
+        .setIdType("MSISDN")
+        .setIdValue("10011110002")  // número de celular del beneficiario
+        .build();
+
+    String homeTransactionId = UUID.randomUUID().toString().replace("-", "");
+
+    TransferRequest transferRequest = TransferRequest.newBuilder()
+        .setAmount(transferAmount)
+        .setFrom(payer)
+        .setTo(payee)
+        .setAmountType("SEND")
+        .setHomeTransactionId(homeTransactionId)
+        .setNote("Pago de servicios")
+        .setTransactionType(txnType)
+        .setThreeppiEnabled(false)
+        .build();
+
+    // Envía la solicitud al Switch
+    TransferResponse grpcResponse = grpcClient.executeTransfer(transferRequest);
+
+    // Maneja la respuesta
+    if (grpcResponse.hasError()) {
+        System.err.println("Error del Switch: "
+            + grpcResponse.getError().getCode() + " "
+            + grpcResponse.getError().getMessage());
+        return; // no continuar el flujo
     }
+
+    TransferSuccessResponse success = grpcResponse.getSuccess();
+    String resultHomeTransactionId  = grpcResponse.getHomeTransactionId();
+    String transferId               = success != null ? success.getTransferId() : "";
     ```
   </TabItem>
   <TabItem label="C#">

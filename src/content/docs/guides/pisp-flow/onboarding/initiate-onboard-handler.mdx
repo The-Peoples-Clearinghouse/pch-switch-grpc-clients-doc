@@ -69,6 +69,48 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setInitiateOnboardRequestHandlerFn(initiateOnboardHandler);
     ```
   </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setInitiateOnboardRequestHandlerFn(req -> {
+        String partyId               = req.getPartyId();
+        String onboardRequestId      = req.getOnboardRequestId();
+        List<AccountAccessRequest> accountAccessRequests = req.getAccountAccessRequestsList();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId           = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId      = req.getSourceFspId();
+
+        ServerInitiateOnboardResponse.Builder response = ServerInitiateOnboardResponse.newBuilder()
+                .setSourceFspId(sourceFspId)
+                .setDestinationFspId(destinationFspId)
+                .setOnboardRequestId(onboardRequestId)
+                .setPartyId(partyId);
+
+        // Usar el primer accountId solicitado como cuenta principal
+        String mainAccountId = !accountAccessRequests.isEmpty()
+                ? accountAccessRequests.get(0).getAccountId()
+                : "ACC-001";
+
+        // Valida que el cliente exista y las cuentas seleccionadas sean válidas
+        if (!elClienteExiste(partyId)) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("PARTY_NOT_FOUND")
+                            .setMessage("No se encontró un cliente asociado al identificador.")
+                            .build())
+                    .build();
+        }
+
+        // Genera el OTP, almacena la relación con el onboardRequestId
+        // y envíalo por SMS al número del cliente (partyId).
+        // Se recomienda que el OTP tenga un tiempo de vida máximo de 10 minutos.
+
+        return response
+                .setMainAccountId(mainAccountId)
+                .build();
+    });
+    ```
+  </TabItem>
   <TabItem label="C#">
     ```csharp
     InitiateOnboardRequestHandlerDelegate initiateOnboardHandler =

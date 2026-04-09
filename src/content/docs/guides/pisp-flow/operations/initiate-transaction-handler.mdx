@@ -88,6 +88,62 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setInitiateTransactionRequestHandlerFn(initiateTransactionHandler);
     ```
   </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setInitiateTransactionRequestHandlerFn(req -> {
+        String  partyId          = req.getPartyId();
+        String  transactionId    = req.getTransactionId();
+        String  payeeId          = req.getPayeeId();
+        String  payeeFsp         = req.getPayeeFsp();
+        String  accountId        = req.getAccountId();
+        String  consentToken     = req.getConsentToken();
+        String  currencyCode     = req.getCurrencyCode();
+        String  amount           = req.getAmount();
+        String  note             = req.getNote();
+        boolean threeppiEnabled  = req.getThreeppiEnabled();
+        String  transactionType  = req.getTransactionType();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String  sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String  destinationFspId = req.getSourceFspId();
+
+        ServerInitiateTransactionResponse.Builder response =
+                ServerInitiateTransactionResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId)
+                        .setPartyId(partyId)
+                        .setTransactionId(transactionId);
+
+        // Verifica el consent token y que la cuenta esté autorizada
+        if (!consentTokenAutorizaCuenta(consentToken, accountId)) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("UNAUTHORIZED")
+                            .setMessage("El consent token no autoriza operaciones sobre la cuenta indicada.")
+                            .build())
+                    .build();
+        }
+
+        // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
+        // Ver: /guides/basic-flow/execute-transfer/
+        ResultadoTransferencia resultado = ejecutarTransferencia(
+                transactionId, payeeId, payeeFsp, accountId, currencyCode, amount, note, transactionType);
+
+        if (!resultado.exitoso) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("TRANSFER_FAILED")
+                            .setMessage("No fue posible ejecutar la transferencia.")
+                            .build())
+                    .build();
+        }
+
+        return response
+                .setTransactionState(resultado.estado)
+                .build();
+    });
+    ```
+  </TabItem>
   <TabItem label="C#">
     ```csharp
     InitiateTransactionRequestHandlerDelegate initiateTransactionHandler =
@@ -160,7 +216,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `partyId` | `string` | Identificador del Cliente pagador (ej. número de celular). |
 | `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
 | `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
-| `transactionId` | `string` | Identificador único de la transacción. |
+| `transactionId` | `string` | Identificador único de la transacción generado por el Switch. |
 | `payeeId` | `string` | Identificador del beneficiario. |
 | `payeeFsp` | `string` | FSP del beneficiario. |
 | `accountId` | `string` | Identificador de la cuenta origen del Cliente. |

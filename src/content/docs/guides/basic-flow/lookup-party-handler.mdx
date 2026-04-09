@@ -61,6 +61,44 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
     grpcClient.setPartyLookupHandlerFn(partyLookupHandler);
     ```
   </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setPartyLookupHandlerFn(req -> {
+        String partyId          = req.getPartyId();
+        String partyIdType      = req.getPartyIdType();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es el banco que originó la consulta
+        String destinationFspId = req.getSourceFspId();
+
+        LookupPartyResponse.Builder response = LookupPartyResponse.newBuilder()
+                .setSourceFspId(sourceFspId)
+                .setDestinationFspId(destinationFspId);
+
+        // Ejecuta reglas de negocio para verificar si la cuenta existe
+        if (!laCuentaExiste(partyId)) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("PARTY_NOT_FOUND")
+                            .setMessage("No se encontró una cuenta asociada al identificador.")
+                            .build())
+                    .build();
+        }
+
+        // Construye la respuesta exitosa con los datos del titular
+        return response
+                .setResponse(LookupPartySuccessResponse.newBuilder()
+                        .setPartyId(partyId)
+                        .setPartyIdType(partyIdType)
+                        .setFirstName("Juan")
+                        .setMiddleName("Alberto")
+                        .setLastName("Pérez")
+                        .setDateOfBirth("2001-03-20")
+                        .build())
+                .build();
+    });
+    ```
+  </TabItem>
   <TabItem label="C#">
     ```csharp
     PartyLookupHandlerDelegate partyLookupHandler = async (ServerPartyInfoRequest request) =>

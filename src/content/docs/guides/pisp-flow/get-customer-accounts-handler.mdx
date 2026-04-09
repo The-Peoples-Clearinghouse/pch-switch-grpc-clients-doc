@@ -80,6 +80,61 @@ El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles
     grpcClient.setGetCustomerAccountsHandlerFn(getCustomerAccountsHandler);
     ```
   </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setGetCustomerAccountsHandlerFn(req -> {
+        String  partyId          = req.getPartyId();
+        boolean isOnboarding     = req.getIsOnboarding();
+        String  consentToken     = req.getConsentToken();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String  sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la consulta
+        String  destinationFspId = req.getSourceFspId();
+
+        ServerGetCustomerAccountsResponse.Builder response =
+                ServerGetCustomerAccountsResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId)
+                        .setPartyId(partyId);
+
+        // Si no es onboarding, el consent token es obligatorio
+        if (!isOnboarding && (consentToken == null || consentToken.trim().isEmpty())) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("MISSING_CONSENT_TOKEN")
+                            .setMessage("Se requiere el consent token para operaciones fuera del onboarding.")
+                            .build())
+                    .build();
+        }
+
+        // Obtener cuentas según el tipo de solicitud:
+        // - Onboarding: todas las cuentas disponibles del cliente
+        // - Operación normal: solo las cuentas asociadas al consent token
+        // List<CustomerAccount> cuentas = isOnboarding
+        //         ? obtenerCuentasDelCliente(partyId)
+        //         : obtenerCuentasPorConsentToken(consentToken);
+
+        // Mock: una sola cuenta de ejemplo
+        response.addAccounts(CustomerAccount.newBuilder()
+                .setAccountId("ACC-001")
+                .setAccountNickname("Cuenta Principal")
+                .setCurrency("MXN")
+                .setIsMainAccount(true)
+                .build());
+
+        if (response.getAccountsCount() == 0) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("CUSTOMER_NOT_FOUND")
+                            .setMessage("No se encontraron cuentas asociadas al cliente.")
+                            .build())
+                    .build();
+        }
+
+        return response.build();
+    });
+    ```
+  </TabItem>
   <TabItem label="C#">
     ```csharp
     GetCustomerAccountsHandlerDelegate getCustomerAccountsHandler =
