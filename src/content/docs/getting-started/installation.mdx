@@ -13,15 +13,17 @@ La Cámara proporciona clientes gRPC listos para usar. No es necesario implement
 
 Antes de instalar el cliente, asegúrate de contar con:
 
-- Los tres archivos de certificados emitidos por la Cámara:
+- Los tres archivos de certificados:
   - `participante.key` — clave privada del participante
   - `participante.pem` — certificado del participante
   - `hub-intermediate.pem` — certificado de la CA Intermedia
 
   Consulta la sección de [Seguridad](/pch-switch-grpc-clients-doc/getting-started/security) para más detalles sobre cómo obtenerlos.
 
-- **Google Cloud CLI** instalada en tu entorno.
-- Una **cuenta de Google con acceso de lectura** al Artifact Registry de PCH, donde se distribuyen todos los clientes.
+- Los paquetes de cliente gRPC para tu lenguaje, proporcionados por la Cámara:
+  - **TypeScript** — disponibles en el Artifact Registry de PCH (ver instrucciones más abajo).
+  - **Java** — archivo `.jar` entregado directamente por la Cámara.
+  - **C#** — archivos `.nupkg` entregados directamente por la Cámara.
 
 ## Instalación
 
@@ -64,67 +66,54 @@ Antes de instalar el cliente, asegúrate de contar con:
   <TabItem label="Java">
     **Requisitos**
 
-    - Java 11 o superior
-    - Maven o Gradle
+    - Java 8 o superior
+    - Maven 3.8+ o Gradle
+    - El archivo JAR proporcionado por la Cámara (`grpc-client-<versión>.jar`)
+
+    **Paso 1 — Instalar el JAR en el repositorio local de Maven**
+
+    La Cámara te entregará directamente el archivo `.jar`. Instálalo en tu repositorio local con el siguiente comando (reemplaza `<versión>` por la indicada):
+
+    ```bash
+    mvn install:install-file \
+      -Dfile=grpc-client-<versión>.jar \
+      -DgroupId=com.pch \
+      -DartifactId=grpc-client \
+      -Dversion=<versión> \
+      -Dpackaging=jar
+    ```
+
+    **Paso 2 — Agregar la dependencia a tu proyecto**
+
+    Una vez instalado, agrégalo como dependencia normal:
 
     **Maven**
     ```xml
     <dependency>
-      <groupId>mx.pch</groupId>
-      <artifactId>switch-client</artifactId>
-      <version>1.0.0</version>
+      <groupId>com.pch</groupId>
+      <artifactId>grpc-client</artifactId>
+      <version><versión></version>
     </dependency>
     ```
 
     **Gradle**
     ```groovy
-    implementation 'mx.pch:switch-client:1.0.0'
+    dependencies {
+        implementation "com.pch:grpc-client:<versión>"
+    }
     ```
   </TabItem>
   <TabItem label="C#">
     **Requisitos**
 
     - .NET 8 o superior
+    - Los archivos `.nupkg` proporcionados por la Cámara
 
-    Los paquetes de C# se distribuyen en un repositorio **genérico** de Google Artifact Registry, por lo que NuGet no puede restaurarlos directamente desde la red. Es necesario descargarlos primero y configurar una fuente local.
+    La Cámara te entregará directamente los archivos `.nupkg`. Colócalos en una carpeta local (por ejemplo `artifacts/nuget`) y configura NuGet para que los tome desde ahí.
 
-    **Paso 1 — Listar los archivos disponibles**
+    **Paso 1 — Agregar la fuente local a NuGet**
 
-    <Tabs syncKey="os">
-      <TabItem label="PowerShell">
-        ```powershell
-        gcloud artifacts files list --repository=external-clients --location=northamerica-south1 --project=pch-main
-        ```
-      </TabItem>
-      <TabItem label="Bash">
-        ```bash
-        gcloud artifacts files list --repository=external-clients --location=northamerica-south1 --project=pch-main
-        ```
-      </TabItem>
-    </Tabs>
-
-    **Paso 2 — Descargar los paquetes**
-
-    Descarga los archivos `.nupkg` en una carpeta local (por ejemplo `artifacts/nuget`). Reemplaza la versión por la indicada por la Cámara.
-
-    <Tabs syncKey="os">
-      <TabItem label="PowerShell">
-        ```powershell
-        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=.\artifacts\nuget --name=Pch.GrpcSyncApi.CSharp.Client.1.0.3.nupkg
-        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=.\artifacts\nuget --name=Pch.GrpcSyncApi.CSharp.Client.Crypto.1.0.3.nupkg
-        ```
-      </TabItem>
-      <TabItem label="Bash">
-        ```bash
-        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=./artifacts/nuget --name=Pch.GrpcSyncApi.CSharp.Client.1.0.3.nupkg
-        gcloud artifacts files download --repository=external-clients --location=northamerica-south1 --project=pch-main --destination=./artifacts/nuget --name=Pch.GrpcSyncApi.CSharp.Client.Crypto.1.0.3.nupkg
-        ```
-      </TabItem>
-    </Tabs>
-
-    **Paso 3 — Agregar la fuente local a NuGet**
-
-    Apunta NuGet a la carpeta donde descargaste los paquetes:
+    Apunta NuGet a la carpeta donde colocaste los paquetes:
 
     <Tabs syncKey="os">
       <TabItem label="PowerShell">
@@ -152,7 +141,7 @@ Antes de instalar el cliente, asegúrate de contar con:
     </configuration>
     ```
 
-    **Paso 4 — Referenciar los paquetes en tu proyecto**
+    **Paso 2 — Referenciar los paquetes en tu proyecto**
 
     - `Pch.GrpcSyncApi.CSharp.Client` — el cliente gRPC. **Requerido.**
     - `Pch.GrpcSyncApi.CSharp.Client.Crypto` — helper criptográfico para el flujo de autenticación. **Opcional** — omítelo si tu equipo ya cuenta con una implementación propia de `ICryptoAndCertHelper`.
