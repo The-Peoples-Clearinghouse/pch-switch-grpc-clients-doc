@@ -145,6 +145,44 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
     grpcClient.setPartyLookupHandler(partyLookupHandler);
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    use Pch\Interop\Proto\Als\LookupPartyResponse;
+    use Pch\Interop\Proto\Als\LookupPartySuccessResponse;
+    use Pch\Interop\Proto\Common\ErrorResponse;
+
+    $client->setPartyLookupHandler(function ($req) {
+        $partyId          = $req->getPartyId();
+        $partyIdType      = $req->getPartyIdType();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        $sourceFspId      = $req->getDestinationFspId();
+        // El destino de la respuesta es el banco que originó la consulta
+        $destinationFspId = $req->getSourceFspId();
+
+        // Ejecuta reglas de negocio para verificar si la cuenta existe
+        if (!laCuentaExiste($partyId)) {
+            return (new LookupPartyResponse())
+                ->setSourceFspId($sourceFspId)
+                ->setDestinationFspId($destinationFspId)
+                ->setError((new ErrorResponse())
+                    ->setCode('PARTY_NOT_FOUND')
+                    ->setMessage('No se encontró una cuenta asociada al identificador.'));
+        }
+
+        // Construye la respuesta exitosa con los datos del titular
+        return (new LookupPartyResponse())
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId)
+            ->setResponse((new LookupPartySuccessResponse())
+                ->setPartyId($partyId)
+                ->setPartyIdType($partyIdType)
+                ->setFirstName('Juan')
+                ->setMiddleName('Alberto')
+                ->setLastName('Pérez')
+                ->setDateOfBirth('2001-03-20'));
+    });
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerPartyInfoRequest`)

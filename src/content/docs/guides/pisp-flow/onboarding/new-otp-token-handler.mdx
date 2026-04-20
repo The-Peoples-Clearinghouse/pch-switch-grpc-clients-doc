@@ -138,6 +138,43 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setNewOtpTokenRequestHandler(newOtpTokenHandler);
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    use Pch\Interop\Proto\Thirdparty\ServerNewOtpTokenResponse;
+    use Pch\Interop\Proto\Common\ErrorResponse;
+
+    $client->setNewOtpTokenHandler(function ($req) {
+        $partyId          = $req->getPartyId();
+        $onboardRequestId = $req->getOnboardRequestId();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        $sourceFspId      = $req->getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        $destinationFspId = $req->getSourceFspId();
+
+        // Verifica que el onboardRequestId corresponda a un onboarding en curso
+        if (!onboardingEnCurso($onboardRequestId)) {
+            return (new ServerNewOtpTokenResponse())
+                ->setSourceFspId($sourceFspId)
+                ->setDestinationFspId($destinationFspId)
+                ->setPartyId($partyId)
+                ->setOnboardRequestId($onboardRequestId)
+                ->setError((new ErrorResponse())
+                    ->setCode('ONBOARD_REQUEST_NOT_FOUND')
+                    ->setMessage('No se encontró un onboarding en curso para el identificador proporcionado.'));
+        }
+
+        // Invalida el OTP anterior, genera uno nuevo y envíalo por SMS al cliente.
+        // Reinicia el tiempo de vida del OTP (se recomienda máximo 10 minutos).
+        generarYEnviarNuevoOtp($partyId, $onboardRequestId);
+
+        return (new ServerNewOtpTokenResponse())
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId)
+            ->setPartyId($partyId)
+            ->setOnboardRequestId($onboardRequestId);
+    });
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerNewOtpTokenRequest`)

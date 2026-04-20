@@ -160,6 +160,49 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setGetAccountsBalanceRequestHandler(getAccountsBalanceHandler);
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    use Pch\Interop\Proto\Thirdparty\ServerGetAccountsBalanceResponse;
+    use Pch\Interop\Proto\Thirdparty\CustomerAccountBalance;
+    use Pch\Interop\Proto\Common\ErrorResponse;
+
+    $client->setGetAccountsBalanceHandler(function ($req) {
+        $partyId          = $req->getPartyId();
+        $accountIds       = $req->getAccountIds();
+        $consentToken     = $req->getConsentToken();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        $sourceFspId      = $req->getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        $destinationFspId = $req->getSourceFspId();
+
+        // Obtiene los saldos de las cuentas asociadas al consent token
+        $cuentas = obtenerSaldosPorConsentToken($consentToken, iterator_to_array($accountIds));
+
+        if (empty($cuentas)) {
+            return (new ServerGetAccountsBalanceResponse())
+                ->setSourceFspId($sourceFspId)
+                ->setDestinationFspId($destinationFspId)
+                ->setPartyId($partyId)
+                ->setError((new ErrorResponse())
+                    ->setCode('ACCOUNTS_NOT_FOUND')
+                    ->setMessage('No se encontraron cuentas asociadas al consent token proporcionado.'));
+        }
+
+        $accountList = array_map(fn($c) => (new CustomerAccountBalance())
+            ->setAccountId($c['id'])
+            ->setAccountNickname($c['alias'])
+            ->setCurrency($c['moneda'])
+            ->setAmount($c['saldo'])
+            ->setIsMainAccount($c['esPrincipal']), $cuentas);
+
+        return (new ServerGetAccountsBalanceResponse())
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId)
+            ->setPartyId($partyId)
+            ->setAccounts($accountList);
+    });
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerGetAccountsBalanceRequest`)
