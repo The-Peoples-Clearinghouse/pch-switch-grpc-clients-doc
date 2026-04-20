@@ -167,6 +167,54 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
     grpcClient.setAcceptTransferHandler(acceptTransferHandler);
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    use Pch\Interop\Proto\Transfer\ServerAcceptTransferResponse;
+    use Pch\Interop\Proto\Common\ErrorResponse;
+
+    $client->setAcceptTransferHandler(function ($req) {
+        $transferId        = $req->getTransferId();
+        $homeTransactionId = $req->getHomeTransactionId();
+        $threeppiEnabled   = $req->getThreeppiEnabled();
+
+        // From, To y Amount son opcionales — verificar antes de usar
+        if (!$req->hasFrom() || !$req->hasTo() || !$req->hasAmount()) {
+            return (new ServerAcceptTransferResponse())
+                ->setTransferId($transferId)
+                ->setHomeTransactionId($homeTransactionId)
+                ->setThreeppiEnabled($threeppiEnabled)
+                ->setError((new ErrorResponse())
+                    ->setCode('MISSING_REQUIRED_FIELDS')
+                    ->setMessage('La solicitud no contiene los campos requeridos.'));
+        }
+
+        // El origen de la respuesta es el banco receptor (el nuestro)
+        $sourceFspId      = $req->getTo()->getFspId();
+        // El destino de la respuesta es el banco que inició la transferencia
+        $destinationFspId = $req->getFrom()->getFspId();
+
+        // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
+        if (!laCuentaDestinoPuedeRecibirFondos($req->getTo()->getIdValue(), $req->getAmount()->getAmount())) {
+            return (new ServerAcceptTransferResponse())
+                ->setTransferId($transferId)
+                ->setHomeTransactionId($homeTransactionId)
+                ->setThreeppiEnabled($threeppiEnabled)
+                ->setError((new ErrorResponse())
+                    ->setCode('ACCOUNT_NOT_ACTIVE')
+                    ->setMessage('La cuenta no está activa o no puede recibir fondos.'));
+        }
+
+        // Actualizar los saldos del beneficiario
+
+        return (new ServerAcceptTransferResponse())
+            ->setTransferId($transferId)
+            ->setHomeTransactionId($homeTransactionId)
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId)
+            ->setThreeppiEnabled($threeppiEnabled);
+    });
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerAcceptTransferRequest`)

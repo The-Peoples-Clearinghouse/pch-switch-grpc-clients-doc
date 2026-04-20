@@ -129,6 +129,45 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
     };
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    use Pch\Interop\Proto\Als\LookupPartyRequest;
+
+    $response = $client->lookupParty(
+        (new LookupPartyRequest())
+            ->setPartyId('10011110002')
+            ->setPartyIdType('MSISDN')
+            ->setPartySubIdOrType('')       // opcional
+            ->setCurrencyCode('MXN')        // opcional
+            ->setOwnerFspId('BANCODESTINO') // opcional
+    );
+
+    // Maneja la respuesta
+    if ($response->hasError()) {
+        echo 'Error del Switch: ' . $response->getError()->getCode() . ' ' . $response->getError()->getMessage();
+        return; // no continuar el flujo
+    }
+
+    $party = $response->getResponse();
+    if ($party === null) {
+        echo 'Respuesta vacía';
+        return; // no continuar el flujo
+    }
+
+    $result = [
+        'sourceFspId'      => $response->getSourceFspId(),
+        'destinationFspId' => $response->getDestinationFspId(),
+        'partyId'          => $party->getPartyId(),
+        'partyIdType'      => $party->getPartyIdType(),
+        'partySubIdOrType' => $party->getPartySubIdOrType() ?: null,
+        'currencyCode'     => $party->getCurrencyCode() ?: null,
+        'firstName'        => $party->getFirstName(),
+        'middleName'       => $party->getMiddleName() ?: null,
+        'lastName'         => $party->getLastName(),
+        'dateOfBirth'      => $party->getDateOfBirth() ?: null,
+    ];
+    ```
+  </TabItem>
 </Tabs>
 
 ## Parámetros de la solicitud

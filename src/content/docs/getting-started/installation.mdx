@@ -1,6 +1,6 @@
 ---
 title: Instalación
-description: Requisitos y pasos de instalación del cliente gRPC de PCH Switch para TypeScript, Java y C#.
+description: Requisitos y pasos de instalación del cliente gRPC de PCH Switch para TypeScript, Java, C# y PHP.
 sidebar:
   order: 3
 ---
@@ -24,6 +24,7 @@ Antes de instalar el cliente, asegúrate de contar con:
   - **TypeScript** — disponibles en el Artifact Registry de PCH (ver instrucciones más abajo).
   - **Java** — archivo `.jar` entregado directamente por la Cámara.
   - **C#** — archivos `.nupkg` entregados directamente por la Cámara.
+  - **PHP** — repositorio Git entregado directamente por la Cámara.
 
 ## Instalación
 
@@ -160,5 +161,66 @@ Antes de instalar el cliente, asegúrate de contar con:
       <PackageReference Include="Pch.GrpcSyncApi.CSharp.Client.Crypto" Version="1.0.3" />
     </ItemGroup>
     ```
+  </TabItem>
+  <TabItem label="PHP">
+    **Requisitos**
+
+    - PHP 8.0 o superior
+    - La extensión `ext-grpc` instalada a nivel de sistema (ver más abajo)
+    - Composer
+
+    **Paso 1 — Instalar la extensión `ext-grpc`**
+
+    La librería requiere la extensión C `ext-grpc`. No puede instalarse vía Composer — debe compilarse e instalarse a nivel de sistema antes de ejecutar `composer install`.
+
+    **Ubuntu / Debian / WSL2**
+    ```bash
+    sudo apt-get install php-dev
+    pecl install grpc
+    echo "extension=grpc.so" >> /etc/php/8.x/cli/php.ini
+    ```
+
+    **Alpine (Docker)**
+    ```dockerfile
+    RUN apk add --no-cache php-dev && pecl install grpc && echo "extension=grpc.so" >> /etc/php8/php.ini
+    ```
+
+    **macOS (Homebrew)**
+    ```bash
+    pecl install grpc
+    ```
+
+    Verifica la instalación:
+    ```bash
+    php -m | grep grpc
+    ```
+
+    **Paso 2 — Agregar el repositorio en `composer.json`**
+
+    La Cámara entregará el repositorio directamente. Agrega la referencia en el `composer.json` de tu proyecto:
+
+    ```json
+    {
+        "repositories": [
+            {
+                "type": "vcs",
+                "url": "git@github.com:tu-org/pch-interop-php-client.git"
+            }
+        ],
+        "require": {
+            "pch/interop-grpc-client": "^1.0"
+        }
+    }
+    ```
+
+    **Paso 3 — Instalar las dependencias**
+
+    ```bash
+    composer install --no-dev
+    ```
+
+    La opción `--no-dev` omite PHPUnit y otros paquetes de desarrollo, reduciendo el directorio `vendor` de ~2 GB a ~6 MB.
+
+    Las clases generadas por protoc bajo `generated/` ya están incluidas en el repositorio — no se requiere ningún paso adicional de generación de código.
   </TabItem>
 </Tabs>

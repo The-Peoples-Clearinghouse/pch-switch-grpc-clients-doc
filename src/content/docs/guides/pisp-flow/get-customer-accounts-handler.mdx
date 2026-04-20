@@ -200,6 +200,56 @@ El módulo 3ppi del Switch consulta al banco del Cliente las cuentas disponibles
     grpcClient.setGetCustomerAccountsHandler(getCustomerAccountsHandler);
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    use Pch\Interop\Proto\Thirdparty\ServerGetCustomerAccountsResponse;
+    use Pch\Interop\Proto\Thirdparty\CustomerAccount;
+    use Pch\Interop\Proto\Common\ErrorResponse;
+
+    $client->setGetCustomerAccountsHandler(function ($req) {
+        $partyId          = $req->getPartyId();
+        $isOnboarding     = $req->getIsOnboarding();
+        $consentToken     = $req->getConsentToken();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        $sourceFspId      = $req->getDestinationFspId();
+        // El destino de la respuesta es quien originó la consulta
+        $destinationFspId = $req->getSourceFspId();
+
+        $builder = (new ServerGetCustomerAccountsResponse())
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId)
+            ->setPartyId($partyId);
+
+        // Si no es onboarding, el consent token es obligatorio
+        if (!$isOnboarding && empty(trim($consentToken))) {
+            return $builder->setError((new ErrorResponse())
+                ->setCode('MISSING_CONSENT_TOKEN')
+                ->setMessage('Se requiere el consent token para operaciones fuera del onboarding.'));
+        }
+
+        // Obtener cuentas según el tipo de solicitud:
+        // - Onboarding: todas las cuentas disponibles del cliente
+        // - Operación normal: solo las cuentas asociadas al consent token
+        $cuentas = $isOnboarding
+            ? obtenerCuentasDelCliente($partyId)
+            : obtenerCuentasPorConsentToken($consentToken);
+
+        if (empty($cuentas)) {
+            return $builder->setError((new ErrorResponse())
+                ->setCode('CUSTOMER_NOT_FOUND')
+                ->setMessage('No se encontraron cuentas asociadas al cliente.'));
+        }
+
+        $accountList = array_map(fn($c) => (new CustomerAccount())
+            ->setAccountId($c['id'])
+            ->setAccountNickname($c['alias'])
+            ->setCurrency($c['moneda'])
+            ->setIsMainAccount($c['esPrincipal']), $cuentas);
+
+        return $builder->setAccounts($accountList);
+    });
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerGetCustomerAccountsRequest`)
