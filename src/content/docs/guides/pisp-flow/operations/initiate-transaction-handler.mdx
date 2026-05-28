@@ -35,6 +35,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       const payeeFsp         = request.getPayeefsp();
       const accountId        = request.getAccountid();
       const consentToken     = request.getConsenttoken();
+      const geolocation      = request.getGeolocation();
+      const deviceId         = request.getDeviceid();
+      const sessionId        = request.getSessionId();
       const currencyCode     = request.getCurrencycode();
       const amount           = request.getAmount();
       const note             = request.getNote();
@@ -57,6 +60,20 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         response.setError(error);
         return response;
       }
+
+      // Verifica la geolocalización y guárdala.
+      const geolocalizacionValida = verificarYGuardarGeolocalizacion(geolocation);
+
+      if (!geolocalizacionValida) {
+        const error = new ErrorResponse();
+        error.setCode('INVALID_GEOLOCATION');
+        error.setMessage('La geolocalización enviada no es válida.');
+        response.setError(error);
+        return response;
+      }
+
+      // Registra la actividad de una operación sensible.
+      registrarActividad('INITIATE_TRANSACTION', deviceId, sessionId, geolocation);
 
       // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
       // Ver: /guides/basic-flow/execute-transfer/
@@ -97,6 +114,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         String  payeeFsp         = req.getPayeeFsp();
         String  accountId        = req.getAccountId();
         String  consentToken     = req.getConsentToken();
+        String  geolocation      = req.getGeolocation();
         String  currencyCode     = req.getCurrencyCode();
         String  amount           = req.getAmount();
         String  note             = req.getNote();
@@ -122,6 +140,16 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                             .setMessage("El consent token no autoriza operaciones sobre la cuenta indicada.")
                             .build())
                     .build();
+        }
+
+        // Verifica la geolocalización y guárdala.
+        if (!verificarYGuardarGeolocalizacion(geolocation)) {
+            return response
+              .setError(ErrorResponse.newBuilder()
+                .setCode("INVALID_GEOLOCATION")
+                .setMessage("La geolocalización enviada no es válida.")
+                .build())
+              .build();
         }
 
         // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
@@ -157,6 +185,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         var payeeFsp         = request.PayeeFsp;
         var accountId        = request.AccountId;
         var consentToken     = request.ConsentToken;
+        var geolocation      = request.Geolocation;
         var currencyCode     = request.CurrencyCode;
         var amount           = request.Amount;
         var note             = request.Note;
@@ -181,6 +210,17 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                 Message = "El consent token no autoriza operaciones sobre la cuenta indicada.",
             };
             return response;
+        }
+
+        // Verifica la geolocalización y guárdala.
+        if (!VerificarYGuardarGeolocalizacion(geolocation))
+        {
+          response.Error = new ErrorResponse
+          {
+            Code    = "INVALID_GEOLOCATION",
+            Message = "La geolocalización enviada no es válida.",
+          };
+          return response;
         }
 
         // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
@@ -221,6 +261,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `payeeFsp` | `string` | FSP del beneficiario. |
 | `accountId` | `string` | Identificador de la cuenta origen del Cliente. |
 | `consentToken` | `string` | Token de consentimiento del Cliente. |
+| `geolocation` | `string` | Geolocalización asociada a la solicitud. |
+| `deviceId` | `string` | Identificador del dispositivo del Cliente. |
+| `sessionId` | `string` | Identificador de la sesión de la app PISP. |
 | `currencyCode` | `string` | Moneda de la transferencia (ej. `'MXN'`). |
 | `amount` | `string` | Monto a transferir. |
 | `note` | `string` | Concepto o nota de la transferencia. |
