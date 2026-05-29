@@ -28,6 +28,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       const destinationFspId = request.getDestinationfspid();
       const accountId        = request.getAccountid();
       const consentToken     = request.getConsenttoken();
+      const geolocation      = request.getGeolocation();
+      const deviceId         = request.getDeviceid();
+      const sessionId        = request.getSessionid();
 
       const response = new ServerSetMainAccountResponse();
       // La fuente de la respuesta es el banco receptor (el nuestro)
@@ -36,6 +39,18 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       response.setDestinationfspid(sourceFspId);
       response.setPartyid(partyId);
       response.setAccountid(accountId);
+
+      // Verifica la geolocalización
+      const geolocalizacionValida = verificarGeolocalizacion(geolocation);
+
+      if (!geolocalizacionValida) {
+        const error = new ErrorResponse();
+        error.setCode('INVALID_GEOLOCATION');
+        error.setMessage('La geolocalización enviada no es válida.');
+        response.setError(error);
+        return response;
+      }
+
 
       // Verifica el consent token y actualiza la cuenta principal
       const resultado = establecerCuentaPrincipal(consentToken, accountId);
@@ -47,6 +62,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         response.setError(error);
         return response;
       }
+
+      // Registra la actividad de una operación sensible.
+      registrarActividad('SET_MAIN_ACCOUNT', deviceId, sessionId, geolocation);
 
       const successResponse = new SetMainAccountSuccessResponse();
       successResponse.setIsmainaccount(resultado.isMainAccount);
@@ -65,6 +83,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         String partyId          = req.getPartyId();
         String accountId        = req.getAccountId();
         String consentToken     = req.getConsentToken();
+        String geolocation      = req.getGeolocation();
+        String deviceId         = req.getDeviceId();
+        String sessionId        = req.getSessionId();
         // La fuente de la respuesta es el banco receptor (el nuestro)
         String sourceFspId      = req.getDestinationFspId();
         // El destino de la respuesta es quien originó la solicitud
@@ -75,6 +96,16 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                 .setDestinationFspId(destinationFspId)
                 .setPartyId(partyId)
                 .setAccountId(accountId);
+
+        // Verifica la geolocalización
+        if (!verificarGeolocalizacion(geolocation)) {
+            return response
+              .setError(ErrorResponse.newBuilder()
+                .setCode("INVALID_GEOLOCATION")
+                .setMessage("La geolocalización enviada no es válida.")
+                .build())
+              .build();
+        }
 
         // Verifica el consent token y actualiza la cuenta principal
         ResultadoCuentaPrincipal resultado = establecerCuentaPrincipal(consentToken, accountId);
@@ -87,6 +118,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                             .build())
                     .build();
         }
+
+        // Registra la actividad de una operación sensible.
+        registrarActividad('SET_MAIN_ACCOUNT', deviceId, sessionId, geolocation);
 
         return response
                 .setSuccessResponse(SetMainAccountSuccessResponse.newBuilder()
@@ -106,6 +140,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         var destinationFspId = request.DestinationFspId;
         var accountId        = request.AccountId;
         var consentToken     = request.ConsentToken;
+        var geolocation      = request.Geolocation;
+        var deviceId         = request.DeviceId;
+        var sessionId        = request.SessionId;
 
         var response = new ServerSetMainAccountResponse
         {
@@ -116,6 +153,17 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             PartyId          = partyId,
             AccountId        = accountId,
         };
+
+          // Verifica la geolocalización
+          if (!VerificarGeolocalizacion(geolocation))
+          {
+            response.Error = new ErrorResponse
+            {
+              Code    = "INVALID_GEOLOCATION",
+              Message = "La geolocalización enviada no es válida.",
+            };
+            return response;
+          }
 
         // Verifica el consent token y actualiza la cuenta principal
         var resultado = EstablecerCuentaPrincipal(consentToken, accountId);
@@ -129,6 +177,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             };
             return response;
         }
+
+        // Registra la actividad de una operación sensible.
+        registrarActividad('SET_MAIN_ACCOUNT', deviceId, sessionId, geolocation);
 
         response.SuccessResponse = new SetMainAccountSuccessResponse
         {
@@ -153,6 +204,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
 | `accountId` | `string` | Identificador de la cuenta a establecer como principal. |
 | `consentToken` | `string` | Token de consentimiento del Cliente. |
+| `geolocation` | `string` | Geolocalización asociada a la solicitud. |
+| `deviceId` | `string` | Identificador del dispositivo del Cliente. |
+| `sessionId` | `string` | Identificador de la sesión de la app PISP. |
 
 Ver referencia completa: [ServerSetMainAccountRequest](/pch-switch-grpc-clients-doc/reference/server-set-main-account-request/)
 

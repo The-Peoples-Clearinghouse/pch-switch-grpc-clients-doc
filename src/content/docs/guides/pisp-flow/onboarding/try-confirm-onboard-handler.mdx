@@ -36,6 +36,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       const destinationFspId = request.getDestinationfspid();
       const onboardRequestId = request.getOnboardrequestid();
       const otpToken         = request.getOtptoken();
+      const geolocation      = request.getGeolocation();
+      const deviceId         = request.getDeviceid();
 
       const response = new ServerTryConfirmOnboardResponse();
       // La fuente de la respuesta es el banco receptor (el nuestro)
@@ -56,6 +58,21 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         return response;
       }
 
+      // Verifica la integridad de la geolocalización
+      const geolocalizacionValida = validarGeolocalizacion(geolocation)
+
+      if(!geolocalizacionValida) {
+        const error = new ErrorResponse();
+        error.setCode('INVALID_GEOLOCATION');
+        error.setMessage('La geolocalización enviada no es válida');
+        response.setError(error);
+        return response;
+      }
+      // guarda la información de la petición al ser una acción sensible. 
+      // Durante el onboarding de un cliente no existe un sessionId, sólo el deviceId
+      registrarActividad('TRY_CONFIRM_ONBOARD', deviceId, null,geolocation);
+
+
       // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
       // con las cuentas y tipos de acceso seleccionados durante el onboarding
       const consentToken = generarYAlmacenarConsentToken(onboardRequestId);
@@ -75,6 +92,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         String partyId          = req.getPartyId();
         String onboardRequestId = req.getOnboardRequestId();
         String otpToken         = req.getOtpToken();
+        String deviceId         = req.getDeviceId();
+        String geolocation      = req.getGeolocation();
         // La fuente de la respuesta es el banco receptor (el nuestro)
         String sourceFspId      = req.getDestinationFspId();
         // El destino de la respuesta es quien originó la solicitud
@@ -96,6 +115,20 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                     .build();
         }
 
+        // Verifica la geolocalización
+        if (!verificarGeolocalizacion(geolocation)) {
+            return response
+              .setError(ErrorResponse.newBuilder()
+                .setCode("INVALID_GEOLOCATION")
+                .setMessage("La geolocalización enviada no es válida.")
+                .build())
+              .build();
+        }
+
+        // Guarda la información de la petición al ser una acción sensible.
+        // Durante el onboarding de un cliente no existe un sessionId, sólo el deviceId.
+        registrarActividad("TRY_CONFIRM_ONBOARD", deviceId, null, geolocation);
+
         // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
         // con las cuentas y tipos de acceso seleccionados durante el onboarding
         String consentToken = "consent-" + UUID.randomUUID().toString().replace("-", "");
@@ -116,6 +149,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         var destinationFspId = request.DestinationFspId;
         var onboardRequestId = request.OnboardRequestId;
         var otpToken         = request.OtpToken;
+        var deviceId         = request.DeviceId;
+        var geolocation      = request.Geolocation;
 
         var response = new ServerTryConfirmOnboardResponse
         {
@@ -137,6 +172,21 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             };
             return response;
         }
+
+        // Verifica la geolocalización
+        if (!VerificarGeolocalizacion(geolocation))
+        {
+          response.Error = new ErrorResponse
+          {
+            Code    = "INVALID_GEOLOCATION",
+            Message = "La geolocalización enviada no es válida.",
+          };
+          return response;
+        }
+
+        // Guarda la información de la petición al ser una acción sensible.
+        // Durante el onboarding de un cliente no existe un sessionId, sólo el deviceId.
+        registrarActividad("TRY_CONFIRM_ONBOARD", deviceId, null, geolocation);
 
         // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
         // con las cuentas y tipos de acceso seleccionados durante el onboarding
@@ -160,6 +210,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
 | `onboardRequestId` | `string` | Identificador del onboarding en curso. |
 | `otpToken` | `string` | Código OTP ingresado por el Cliente en la app PISP. |
+| `geolocation` | `string` | Geolocalización asociada a la solicitud. |
+| `deviceId` | `string` | Identificador del dispositivo del Cliente. |
 
 Ver referencia completa: [ServerTryConfirmOnboardRequest](/pch-switch-grpc-clients-doc/reference/server-try-confirm-onboard-request/)
 

@@ -35,6 +35,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       const payeeFsp         = request.getPayeefsp();
       const accountId        = request.getAccountid();
       const consentToken     = request.getConsenttoken();
+      const geolocation      = request.getGeolocation();
+      const deviceId         = request.getDeviceid();
+      const sessionId        = request.getSessionid();
       const currencyCode     = request.getCurrencycode();
       const amount           = request.getAmount();
       const note             = request.getNote();
@@ -57,6 +60,20 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         response.setError(error);
         return response;
       }
+
+      // Verifica la geolocalización
+      const geolocalizacionValida = verificarGeolocalizacion(geolocation);
+
+      if (!geolocalizacionValida) {
+        const error = new ErrorResponse();
+        error.setCode('INVALID_GEOLOCATION');
+        error.setMessage('La geolocalización enviada no es válida.');
+        response.setError(error);
+        return response;
+      }
+
+      // Registra la actividad de una operación sensible.
+      registrarActividad('INITIATE_TRANSACTION', deviceId, sessionId, geolocation);
 
       // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
       // Ver: /guides/basic-flow/execute-transfer/
@@ -97,6 +114,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         String  payeeFsp         = req.getPayeeFsp();
         String  accountId        = req.getAccountId();
         String  consentToken     = req.getConsentToken();
+        String  geolocation      = req.getGeolocation();
+        String  deviceId         = req.getDeviceId();
+        String  sessionId        = req.getSessionId();
         String  currencyCode     = req.getCurrencyCode();
         String  amount           = req.getAmount();
         String  note             = req.getNote();
@@ -124,6 +144,16 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                     .build();
         }
 
+        // Verifica la geolocalización
+        if (!verificarGeolocalizacion(geolocation)) {
+            return response
+              .setError(ErrorResponse.newBuilder()
+                .setCode("INVALID_GEOLOCATION")
+                .setMessage("La geolocalización enviada no es válida.")
+                .build())
+              .build();
+        }
+
         // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
         // Ver: /guides/basic-flow/execute-transfer/
         ResultadoTransferencia resultado = ejecutarTransferencia(
@@ -137,6 +167,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                             .build())
                     .build();
         }
+
+        // Registra la actividad de una operación sensible.
+        registrarActividad('TRANSACTION', deviceId, sessionId, geolocation);
 
         return response
                 .setTransactionState(resultado.estado)
@@ -157,6 +190,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         var payeeFsp         = request.PayeeFsp;
         var accountId        = request.AccountId;
         var consentToken     = request.ConsentToken;
+        var geolocation      = request.Geolocation;
+        var deviceId         = request.DeviceId;
+        var sessionId        = request.SessionId;
         var currencyCode     = request.CurrencyCode;
         var amount           = request.Amount;
         var note             = request.Note;
@@ -183,6 +219,17 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             return response;
         }
 
+        // Verifica la geolocalización
+        if (!VerificarGeolocalizacion(geolocation))
+        {
+          response.Error = new ErrorResponse
+          {
+            Code    = "INVALID_GEOLOCATION",
+            Message = "La geolocalización enviada no es válida.",
+          };
+          return response;
+        }
+
         // Ejecuta la transferencia hacia el Switch mediante ExecuteTransfer
         // Ver: /guides/basic-flow/execute-transfer/
         var resultado = EjecutarTransferencia(transactionId, payeeId, payeeFsp,
@@ -197,6 +244,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             };
             return response;
         }
+
+        // Registra la actividad de una operación sensible.
+        registrarActividad('TRANSACTION', deviceId, sessionId, geolocation);
 
         response.TransactionState = resultado.Estado;
 
@@ -221,6 +271,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `payeeFsp` | `string` | FSP del beneficiario. |
 | `accountId` | `string` | Identificador de la cuenta origen del Cliente. |
 | `consentToken` | `string` | Token de consentimiento del Cliente. |
+| `geolocation` | `string` | Geolocalización asociada a la solicitud. |
+| `deviceId` | `string` | Identificador del dispositivo del Cliente. |
+| `sessionId` | `string` | Identificador de la sesión de la app PISP. |
 | `currencyCode` | `string` | Moneda de la transferencia (ej. `'MXN'`). |
 | `amount` | `string` | Monto a transferir. |
 | `note` | `string` | Concepto o nota de la transferencia. |
