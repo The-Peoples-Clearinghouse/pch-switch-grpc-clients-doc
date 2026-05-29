@@ -59,7 +59,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       }
 
       // Verifica la integridad de la geolocalización
-      const geolocalizacionValida = validarGeolocalización
+      const geolocalizacionValida = validarGeolocalización(geolocation)
 
       if(!geolocalizacionValida) {
         const error = new ErrorResponse();
@@ -115,8 +115,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                     .build();
         }
 
-        // Verifica la geolocalización y guárdala si corresponde
-        if (!verificarYGuardarGeolocalizacion(geolocation)) {
+        // Verifica la geolocalización
+        if (!verificarGeolocalizacion(geolocation)) {
             return response
               .setError(ErrorResponse.newBuilder()
                 .setCode("INVALID_GEOLOCATION")
@@ -173,8 +173,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             return response;
         }
 
-        // Verifica la geolocalización y guárdala si corresponde
-        if (!VerificarYGuardarGeolocalizacion(geolocation))
+        // Verifica la geolocalización
+        if (!VerificarGeolocalizacion(geolocation))
         {
           response.Error = new ErrorResponse
           {
