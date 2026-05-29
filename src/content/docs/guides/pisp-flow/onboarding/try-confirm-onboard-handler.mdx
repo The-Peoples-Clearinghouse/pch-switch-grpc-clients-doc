@@ -59,7 +59,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       }
 
       // Verifica la integridad de la geolocalización
-      const geolocalizacionValida = validarGeolocalización(geolocation)
+      const geolocalizacionValida = validarGeolocalizacion(geolocation)
 
       if(!geolocalizacionValida) {
         const error = new ErrorResponse();
