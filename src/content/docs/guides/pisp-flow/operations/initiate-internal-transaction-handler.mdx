@@ -37,7 +37,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       const consentToken     = request.getConsenttoken();
       const geolocation      = request.getGeolocation();
       const deviceId         = request.getDeviceid();
-      const sessionId        = request.getSessionId();
+      const sessionId        = request.getSessionid();
       const currencyCode     = request.getCurrencycode();
       const amount           = request.getAmount();
       const note             = request.getNote();
@@ -73,7 +73,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       }
 
       // Registra la actividad de una operación sensible.
-      registrarActividad('INITIATE_INTERNAL_TRANSACTION', deviceId, sessionId, geolocation);
+      registrarActividad('TRANSACTION', deviceId, sessionId, geolocation);
 
       // Ejecuta la transferencia internamente en el core bancario,
       // sin pasar por el Switch
@@ -113,6 +113,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         String  accountId        = req.getAccountId();
         String  consentToken     = req.getConsentToken();
         String  geolocation      = req.getGeolocation();
+        String  deviceId         = req.getDeviceId();
+        String  sessionId        = req.getSessionId();
         String  currencyCode     = req.getCurrencyCode();
         String  amount           = req.getAmount();
         String  note             = req.getNote();
@@ -164,9 +166,12 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                     .build();
         }
 
-        return response
-                .setTransactionState(resultado.estado)
-                .build();
+        // Registra la actividad de una operación sensible.
+        registrarActividad('TRANSACTION', deviceId, sessionId, geolocation);
+
+      return response
+              .setTransactionState(resultado.estado)
+              .build();
     });
     ```
   </TabItem>
@@ -183,6 +188,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         var accountId        = request.AccountId;
         var consentToken     = request.ConsentToken;
         var geolocation      = request.Geolocation;
+        var deviceId         = request.DeviceId;
+        var sessionId        = request.SessionId;
         var currencyCode     = request.CurrencyCode;
         var amount           = request.Amount;
         var note             = request.Note;
@@ -236,6 +243,9 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
         }
 
         response.TransactionState = resultado.Estado;
+
+        // Registra la actividad de una operación sensible.
+        registrarActividad('TRANSACTION', deviceId, sessionId, geolocation);
 
         return response;
     };
