@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Esta página describe la secuencia de solicitudes que tu cliente gRPC recibe durante el onboarding en línea de un Cliente en una app PISP. Como integrador, implementas un **handler** por cada paso: recibes una solicitud del módulo 3ppi del Switch (`Server…Request`), ejecutas la lógica correspondiente contra tu core y devuelves la respuesta (`Server…Response`). Para cada paso encontrarás el enlace a la documentación del handler correspondiente, donde se detallan los campos y el código de implementación.
+Esta página describe la secuencia de solicitudes que tu cliente gRPC recibe durante el onboarding en línea de un Cliente en una app PISP. Como integrador, implementas un **handler** por cada paso: recibes una solicitud del módulo 3ppi del Switch, ejecutas la lógica correspondiente contra tu core y devuelves la respuesta. Para cada paso encontrarás el enlace a la documentación del handler correspondiente, donde se detallan los campos y el código de implementación.
 
 Al igual que el [onboarding presencial](/pch-switch-grpc-clients-doc/guides/pisp-flow/onboarding/onboarding-flow/), el onboarding en línea opera sobre cuentas que ya existen en tu banco: el Cliente ya debe ser titular y tener su información lista. La diferencia es que todo el flujo se realiza en línea.
 
