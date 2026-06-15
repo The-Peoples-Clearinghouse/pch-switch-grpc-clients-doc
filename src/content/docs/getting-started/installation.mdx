@@ -161,4 +161,53 @@ Antes de instalar el cliente, asegúrate de contar con:
     </ItemGroup>
     ```
   </TabItem>
+  <TabItem label="PHP">
+    **Requisitos**
+
+    - PHP 8.1 o superior
+    - Composer
+    - Las extensiones `ext-openssl` y `ext-grpc`
+
+    **Paso 1 — Instalar la extensión `ext-grpc`**
+
+    La extensión C `ext-grpc` **no** se instala vía Composer: debe compilarse e instalarse a nivel de sistema antes de ejecutar `composer install`.
+
+    ```bash
+    sudo apt-get install php-dev
+    pie install grpc
+    echo "extension=grpc.so" >> /etc/php/8.x/cli/php.ini
+    ```
+
+    Verifica la instalación:
+
+    ```bash
+    php -m | grep grpc
+    ```
+
+    **Paso 2 — Agregar el repositorio privado y la dependencia**
+
+    Al tratarse de un paquete privado, agrega el repositorio (proporcionado por la Cámara) en el `composer.json` de tu proyecto:
+
+    ```json
+    {
+        "repositories": [
+            {
+                "type": "vcs",
+                "url": "git@github.com:The-Peoples-Clearinghouse/pch-interop-php-client.git"
+            }
+        ],
+        "require": {
+            "pch/interop-grpc-client": "^1.0"
+        }
+    }
+    ```
+
+    **Paso 3 — Instalar**
+
+    ```bash
+    composer install --no-dev
+    ```
+
+    Las clases generadas a partir de los `.proto` ya vienen incluidas en el paquete — no se requiere un paso de generación de código adicional.
+  </TabItem>
 </Tabs>

@@ -129,6 +129,37 @@ Este paso debe completarse antes de solicitar al usuario el monto y concepto, ya
     };
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $request = (new LookupPartyRequest())
+        ->setPartyId('10011110002')
+        ->setPartyIdType('MSISDN')
+        ->setPartySubIdOrType('')        // opcional
+        ->setCurrencyCode('MXN')         // opcional
+        ->setOwnerFspId('BANCODESTINO'); // opcional
+
+    // Envía la solicitud al Switch
+    $grpcResponse = $client->lookupParty($request);
+
+    // Maneja la respuesta
+    if ($grpcResponse->hasError()) {
+        fwrite(STDERR, 'Error del Switch: '
+            . $grpcResponse->getError()->getCode() . ' '
+            . $grpcResponse->getError()->getMessage() . "\n");
+        return; // no continuar el flujo
+    }
+
+    $response         = $grpcResponse->getResponse();
+    $sourceFspId      = $grpcResponse->getSourceFspId();
+    $destinationFspId = $grpcResponse->getDestinationFspId();
+    $partyId          = $response->getPartyId();
+    $partyIdType      = $response->getPartyIdType();
+    $firstName        = $response->getFirstName();
+    $middleName       = $response->getMiddleName();
+    $lastName         = $response->getLastName();
+    $dateOfBirth      = $response->getDateOfBirth();
+    ```
+  </TabItem>
 </Tabs>
 
 ## Parámetros de la solicitud

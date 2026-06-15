@@ -136,6 +136,34 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     grpcClient.setSubmitOnlineKycHandler(submitOnlineKycHandler);
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $client->setSubmitOnlineKycHandler(function ($req) {
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        $sourceFspId         = $req->getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        $destinationFspId    = $req->getSourceFspId();
+        $onboardingRequestId = $req->getOnboardingRequestId();
+        $kycData             = $req->getKycData();
+
+        $response = (new ServerSubmitOnlineKycResponse())
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId)
+            ->setOnboardingRequestId($onboardingRequestId);
+
+        // Almacena los resultados del KYC y evalúalos según tus políticas de cumplimiento
+        if (!evaluarYAlmacenarKyc($onboardingRequestId, $kycData)) {
+            return $response
+                ->setSuccess(false)
+                ->setError((new ErrorResponse())
+                    ->setCode('KYC_REJECTED')
+                    ->setMessage('Los resultados del KYC no cumplen las políticas de cumplimiento.'));
+        }
+
+        return $response->setSuccess(true);
+    });
+    ```
+  </TabItem>
 </Tabs>
 
 ## Campos del mensaje entrante (`ServerSubmitOnlineKycRequest`)

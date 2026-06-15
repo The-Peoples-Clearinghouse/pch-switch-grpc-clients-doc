@@ -174,6 +174,45 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
     };
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $transferRequest = (new TransferRequest())
+        ->setTransactionType((new TransactionType())
+            ->setInitiator('PAYER')
+            ->setInitiatorType('CUSTOMER')
+            ->setScenario('TRANSFER')
+            ->setSubScenario('DOMESTIC'))
+        ->setAmount((new Amount())
+            ->setAmount('10')
+            ->setCurrencyCode('MXN'))
+        ->setFrom((new Party())
+            ->setFspId('BANCOORIGEN')
+            ->setIdType('MSISDN')
+            ->setIdValue('1001110001'))
+        ->setTo((new Party())
+            ->setFspId('BANCODESTINO')   // banco beneficiario obtenido de LookupParty
+            ->setIdType('MSISDN')
+            ->setIdValue('10011110002')) // número de celular del beneficiario
+        ->setAmountType('SEND')
+        ->setHomeTransactionId(bin2hex(random_bytes(16)))
+        ->setNote('Pago de servicios')
+        ->setThreeppiEnabled(false);
+
+    // Envía la solicitud al Switch
+    $grpcResponse = $client->executeTransfer($transferRequest);
+
+    // Maneja la respuesta
+    if ($grpcResponse->hasError()) {
+        fwrite(STDERR, 'Error del Switch: '
+            . $grpcResponse->getError()->getCode() . ' '
+            . $grpcResponse->getError()->getMessage() . "\n");
+        return; // no continuar el flujo
+    }
+
+    $homeTransactionId = $grpcResponse->getHomeTransactionId();
+    $transferId        = $grpcResponse->hasSuccess() ? $grpcResponse->getSuccess()->getTransferId() : '';
+    ```
+  </TabItem>
 </Tabs>
 
 ## Parámetros de la solicitud
