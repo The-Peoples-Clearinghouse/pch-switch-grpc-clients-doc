@@ -1,0 +1,212 @@
+---
+title: Enviar resultados de KYC
+description: Cómo registrar un handler para recibir y evaluar los resultados del KYC durante el onboarding en línea.
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Tras validar el OTP, la app PISP realiza una entrevista KYC (Know Your Customer) que incluye validación de identidad, prueba de vida y reconocimiento facial. El módulo 3ppi del Switch envía a tu banco una solicitud `SubmitOnlineKyc` con los resultados de esa entrevista. Tu banco debe evaluar y almacenar dichos resultados para decidir si el Cliente puede continuar con el alta.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi envíe los resultados de KYC de un onboarding en línea en curso.
+
+<Aside type="note">
+  Tu banco es responsable de:
+  - Almacenar los resultados del KYC asociados al `onboardingRequestId`.
+  - Evaluar los estatus y puntajes recibidos (`overallStatus`, `idValidationStatus`, `livenessStatus`, `faceRecognitionStatus`, etc.) según tus políticas de cumplimiento.
+  - Determinar si el Cliente aprueba el KYC y puede avanzar al siguiente paso.
+</Aside>
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si el KYC no cumple tus políticas o el `onboardingRequestId` no es válido, responde con `success = false` y un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function submitOnlineKycHandler(
+      request: ServerSubmitOnlineKycRequest,
+    ): Promise<ServerSubmitOnlineKycResponse> {
+      const sourceFspId         = request.getSourcefspid();
+      const destinationFspId    = request.getDestinationfspid();
+      const onboardingRequestId = request.getOnboardingrequestid();
+      const kycData             = request.getKycdata();
+
+      const response = new ServerSubmitOnlineKycResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setOnboardingrequestid(onboardingRequestId);
+
+      // Almacena los resultados del KYC y evalúalos según tus políticas de cumplimiento
+      const aprobado = evaluarYAlmacenarKyc(onboardingRequestId, kycData);
+
+      if (!aprobado) {
+        const error = new ErrorResponse();
+        error.setCode('KYC_REJECTED');
+        error.setMessage('Los resultados del KYC no cumplen las políticas de cumplimiento.');
+        response.setSuccess(false);
+        response.setError(error);
+        return response;
+      }
+
+      response.setSuccess(true);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSubmitOnlineKycHandlerFn(submitOnlineKycHandler);
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setSubmitOnlineKycHandlerFn(req -> {
+        String onboardingRequestId = req.getOnboardingRequestId();
+        KycData kycData            = req.getKycData();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId         = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId    = req.getSourceFspId();
+
+        ServerSubmitOnlineKycResponse.Builder response =
+                ServerSubmitOnlineKycResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId)
+                        .setOnboardingRequestId(onboardingRequestId);
+
+        // Almacena los resultados del KYC y evalúalos según tus políticas de cumplimiento
+        if (!evaluarYAlmacenarKyc(onboardingRequestId, kycData)) {
+            return response
+                    .setSuccess(false)
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("KYC_REJECTED")
+                            .setMessage("Los resultados del KYC no cumplen las políticas de cumplimiento.")
+                            .build())
+                    .build();
+        }
+
+        return response
+                .setSuccess(true)
+                .build();
+    });
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    SubmitOnlineKycHandlerDelegate submitOnlineKycHandler =
+        async (ServerSubmitOnlineKycRequest request) =>
+    {
+        var sourceFspId         = request.SourceFspId;
+        var destinationFspId    = request.DestinationFspId;
+        var onboardingRequestId = request.OnboardingRequestId;
+        var kycData             = request.KycData;
+
+        var response = new ServerSubmitOnlineKycResponse
+        {
+            // La fuente de la respuesta es el banco receptor (el nuestro)
+            SourceFspId         = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId    = sourceFspId,
+            OnboardingRequestId = onboardingRequestId,
+        };
+
+        // Almacena los resultados del KYC y evalúalos según tus políticas de cumplimiento
+        if (!EvaluarYAlmacenarKyc(onboardingRequestId, kycData))
+        {
+            response.Success = false;
+            response.Error = new ErrorResponse
+            {
+                Code    = "KYC_REJECTED",
+                Message = "Los resultados del KYC no cumplen las políticas de cumplimiento.",
+            };
+            return response;
+        }
+
+        response.Success = true;
+
+        return response;
+    };
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSubmitOnlineKycHandler(submitOnlineKycHandler);
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $client->setSubmitOnlineKycHandler(function ($req) {
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        $sourceFspId         = $req->getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        $destinationFspId    = $req->getSourceFspId();
+        $onboardingRequestId = $req->getOnboardingRequestId();
+        $kycData             = $req->getKycData();
+
+        $response = (new ServerSubmitOnlineKycResponse())
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId)
+            ->setOnboardingRequestId($onboardingRequestId);
+
+        // Almacena los resultados del KYC y evalúalos según tus políticas de cumplimiento
+        if (!evaluarYAlmacenarKyc($onboardingRequestId, $kycData)) {
+            return $response
+                ->setSuccess(false)
+                ->setError((new ErrorResponse())
+                    ->setCode('KYC_REJECTED')
+                    ->setMessage('Los resultados del KYC no cumplen las políticas de cumplimiento.'));
+        }
+
+        return $response->setSuccess(true);
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerSubmitOnlineKycRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `onboardingRequestId` | `string` | Identificador del onboarding en línea en curso. |
+| `kycData` | `KycData` | Resultados de la entrevista KYC realizada por la app PISP. |
+
+**KycData**
+
+<Aside type="caution">
+  La estructura de `KycData` aún está **por definirse**. Los campos que se listan a continuación se eligieron por diseño y para pruebas; en la versión final podrían ser menos.
+</Aside>
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `kycInterviewId` | `string` | Identificador de la entrevista KYC. |
+| `overallStatus` | `string` | Estatus general del KYC. |
+| `overallScore` | `string` | Puntaje general del KYC. |
+| `idValidationStatus` | `string` | Estatus de la validación del documento de identidad. |
+| `idValidationScore` | `string` | Puntaje de la validación del documento de identidad. |
+| `livenessStatus` | `string` | Estatus de la prueba de vida. |
+| `livenessScore` | `string` | Puntaje de la prueba de vida. |
+| `faceRecognitionStatus` | `string` | Estatus del reconocimiento facial. |
+| `faceRecognitionScore` | `string` | Puntaje del reconocimiento facial. |
+
+Ver referencia completa: [ServerSubmitOnlineKycRequest](/pch-switch-grpc-clients-doc/reference/server-submit-online-kyc-request/)
+
+## Respuesta (`ServerSubmitOnlineKycResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `onboardingRequestId` | `string` | Sí | Identificador del onboarding (mismo que el recibido). |
+| `success` | `bool` | Sí | `true` si el KYC fue aceptado; `false` en caso contrario. |
+| `error` | `ErrorResponse` | No | Incluir si el KYC fue rechazado o el onboarding no existe. |
+
+Ver referencia completa: [ServerSubmitOnlineKycResponse](/pch-switch-grpc-clients-doc/reference/server-submit-online-kyc-response/)
+
+## Cuando el KYC es rechazado
+
+Si los resultados del KYC no cumplen tus políticas de cumplimiento, responde con `success = false` e incluye un `ErrorResponse` en la respuesta.

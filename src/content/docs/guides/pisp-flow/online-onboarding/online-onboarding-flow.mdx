@@ -1,0 +1,73 @@
+---
+title: Flujo de onboarding en línea
+description: Descripción del flujo completo para dar de alta a un cliente nuevo de forma 100% digital a través de una app PISP.
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Esta página describe la secuencia de solicitudes que tu cliente gRPC recibe durante el onboarding en línea de un Cliente en una app PISP. Como integrador, implementas un **handler** por cada paso: recibes una solicitud del módulo 3ppi del Switch, ejecutas la lógica correspondiente contra tu core y devuelves la respuesta. Para cada paso encontrarás el enlace a la documentación del handler correspondiente, donde se detallan los campos y el código de implementación.
+
+Al igual que el [onboarding presencial](/pch-switch-grpc-clients-doc/guides/pisp-flow/onboarding/onboarding-flow/), el onboarding en línea opera sobre cuentas que ya existen en tu banco: el Cliente ya debe ser titular y tener su información lista. La diferencia es que todo el flujo se realiza en línea.
+
+En el primer paso debes validar que el número de teléfono recibido corresponda a un Cliente con cuentas existentes. Si el Cliente no existe o no tiene su información lista, el onboarding no puede continuar y debes responder con un error.
+
+<Aside type="note">
+  Todos los pasos de este flujo se identifican con un mismo `onboardingRequestId`, que tu banco debe usar para correlacionar la solicitud en curso a lo largo de toda la secuencia.
+</Aside>
+
+---
+
+## Onboarding en línea
+
+El flujo involucra cinco pasos en secuencia. En cada uno, tu cliente gRPC recibe una solicitud del módulo 3ppi del Switch y debes responderla desde el handler correspondiente.
+
+### Paso 1 — Iniciar onboarding en línea
+
+Recibes el número de teléfono y el identificador del dispositivo del Cliente. Debes:
+
+1. Validar que el número de teléfono corresponda a un Cliente existente con su información lista en el banco. Si no es así, responde con un error y no continúes.
+2. Registrar el onboarding en curso asociado al `onboardingRequestId`.
+3. Generar un OTP y vincularlo al `onboardingRequestId`.
+4. Enviar el OTP por SMS al número del Cliente para confirmar la posesión del dispositivo.
+
+→ Ver implementación: [Iniciar onboarding en línea](/pch-switch-grpc-clients-doc/guides/pisp-flow/online-onboarding/initiate-online-onboarding-handler/)
+
+### Paso 2 — Validar el OTP
+
+Recibes el OTP que el Cliente ingresó en la app. Debes verificar que sea correcto y que no haya expirado; si lo es, invalídalo y responde con el nombre completo del Cliente.
+
+→ Ver implementación: [Validar OTP de onboarding en línea](/pch-switch-grpc-clients-doc/guides/pisp-flow/online-onboarding/validate-online-onboarding-otp-handler/)
+
+### Paso 3 — Enviar resultados de KYC
+
+Recibes los resultados de la entrevista KYC realizada en la app (validación de identidad, prueba de vida y reconocimiento facial). Debes evaluarlos según tus políticas de cumplimiento, almacenarlos y responder si el Cliente puede continuar con el alta.
+
+→ Ver implementación: [Enviar resultados de KYC](/pch-switch-grpc-clients-doc/guides/pisp-flow/online-onboarding/submit-online-kyc-handler/)
+
+### Paso 4 — Enviar acuerdos
+
+Recibes los términos y condiciones y el contrato digital aceptados por el Cliente. Debes almacenarlos y responder con la lista de cuentas existentes del Cliente, indicando cuál es la cuenta principal.
+
+→ Ver implementación: [Enviar acuerdos](/pch-switch-grpc-clients-doc/guides/pisp-flow/online-onboarding/submit-online-agreements-handler/)
+
+### Paso 5 — Finalizar onboarding en línea
+
+Recibes las cuentas seleccionadas por el Cliente y los tipos de acceso para cada una, junto con el `deviceId` y la geolocalización. Si todo es correcto, debes:
+
+1. Generar el **Consent Token** (se recomienda UUID v4).
+2. Almacenar la relación entre el Consent Token, las cuentas seleccionadas y los tipos de acceso autorizados.
+3. Registrar la actividad por tratarse de una acción sensible.
+
+El Consent Token que devuelves en este paso es el que acompañará todas las operaciones PISP futuras del Cliente.
+
+→ Ver implementación: [Finalizar onboarding en línea](/pch-switch-grpc-clients-doc/guides/pisp-flow/online-onboarding/finalize-online-onboarding-handler/)
+
+<Aside type="note">
+  Al finalizar el paso 5, el proceso de onboarding en línea está completo. El módulo pisp conserva el Consent Token y lo incluirá en todos los requests posteriores que realice a nombre del Cliente.
+</Aside>
+
+<Aside type="caution">
+  Cada handler debe responder siempre dentro del tiempo límite. Si la solicitud no es válida (por ejemplo, un `onboardingRequestId` inexistente, un OTP incorrecto o un KYC rechazado), responde con un `ErrorResponse` en lugar de no responder.
+</Aside>

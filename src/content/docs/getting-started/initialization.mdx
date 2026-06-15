@@ -127,6 +127,30 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     Console.WriteLine("Cliente conectado y autenticado");
     ```
   </TabItem>
+  <TabItem label="PHP">
+    ```php
+    use Pch\Interop\InteropGrpcApiClient;
+
+    $clientPrivateKey = file_get_contents('./certs/participante.key');
+    $clientCertPem    = file_get_contents('./certs/participante.pem');
+    $caCertPem        = file_get_contents('./certs/hub-intermediate.pem');
+
+    $client = new InteropGrpcApiClient(
+        serviceUrl:       'switch.camara.mx:443',  // dirección del servidor gRPC
+        fspId:            'MIBANCO',               // fspId: debe coincidir con el del certificado
+        clientCertPem:    $clientCertPem,
+        clientPrivateKey: $clientPrivateKey,
+        caCertPem:        $caCertPem,
+        mainClient:       true,
+        securityMode:     InteropGrpcApiClient::SECURITY_MODE_SERVER_TLS,
+    );
+
+    if (!$client->init()) {
+        throw new RuntimeException('No se pudo abrir el stream o autenticar');
+    }
+    echo "Cliente conectado y autenticado\n";
+    ```
+  </TabItem>
 </Tabs>
 
 <Aside type="note">
