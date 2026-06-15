@@ -1,0 +1,201 @@
+---
+title: Enviar acuerdos
+description: Cómo registrar un handler para recibir los acuerdos aceptados por el Cliente y crear sus cuentas durante el onboarding en línea.
+sidebar:
+  order: 5
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Tras aprobar el KYC, el Cliente acepta los términos y condiciones y el contrato digital en la app PISP. El módulo 3ppi del Switch envía a tu banco una solicitud `SubmitOnlineAgreements` con ambos acuerdos. Si todo es correcto, tu banco debe almacenar los acuerdos y devolver la lista de cuentas **existentes** del Cliente, indicando cuál es la cuenta principal.
+
+El onboarding en línea opera sobre cuentas que ya existen en tu banco; este paso no crea cuentas nuevas, sino que devuelve las que ya pertenecen al Cliente para que pueda seleccionarlas en el paso de finalización.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi envíe los acuerdos aceptados de un onboarding en línea en curso.
+
+<Aside type="note">
+  Tu banco es responsable de:
+  - Almacenar los acuerdos aceptados (versión, contenido y fecha de aceptación) asociados al `onboardingRequestId`.
+  - Devolver la lista de cuentas existentes del Cliente, indicando cuál es la cuenta principal.
+</Aside>
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si los acuerdos no fueron aceptados, el Cliente no tiene cuentas disponibles o el `onboardingRequestId` no es válido, responde con un `ErrorResponse` en lugar de no responder.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function submitOnlineAgreementsHandler(
+      request: ServerSubmitOnlineAgreementsRequest,
+    ): Promise<ServerSubmitOnlineAgreementsResponse> {
+      const sourceFspId         = request.getSourcefspid();
+      const destinationFspId    = request.getDestinationfspid();
+      const onboardingRequestId = request.getOnboardingrequestid();
+      const termsAndConditions  = request.getTermsandconditions();
+      const digitalContract     = request.getDigitalcontract();
+
+      const response = new ServerSubmitOnlineAgreementsResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setOnboardingrequestid(onboardingRequestId);
+
+      // Verifica que ambos acuerdos hayan sido aceptados
+      if (!termsAndConditions.getAccepted() || !digitalContract.getAccepted()) {
+        const error = new ErrorResponse();
+        error.setCode('AGREEMENTS_NOT_ACCEPTED');
+        error.setMessage('El cliente no aceptó los acuerdos requeridos.');
+        response.setError(error);
+        return response;
+      }
+
+      // Almacena los acuerdos y recupera las cuentas existentes del cliente
+      const cuentas = almacenarAcuerdosYObtenerCuentas(
+        onboardingRequestId,
+        termsAndConditions,
+        digitalContract,
+      );
+
+      response.setAccountsList(cuentas);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSubmitOnlineAgreementsHandlerFn(submitOnlineAgreementsHandler);
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setSubmitOnlineAgreementsHandlerFn(req -> {
+        String onboardingRequestId      = req.getOnboardingRequestId();
+        AgreementData termsAndConditions = req.getTermsAndConditions();
+        AgreementData digitalContract    = req.getDigitalContract();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId              = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId         = req.getSourceFspId();
+
+        ServerSubmitOnlineAgreementsResponse.Builder response =
+                ServerSubmitOnlineAgreementsResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId)
+                        .setOnboardingRequestId(onboardingRequestId);
+
+        // Verifica que ambos acuerdos hayan sido aceptados
+        if (!termsAndConditions.getAccepted() || !digitalContract.getAccepted()) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("AGREEMENTS_NOT_ACCEPTED")
+                            .setMessage("El cliente no aceptó los acuerdos requeridos.")
+                            .build())
+                    .build();
+        }
+
+        // Almacena los acuerdos y recupera las cuentas existentes del cliente
+        List<CustomerAccount> cuentas = almacenarAcuerdosYObtenerCuentas(
+                onboardingRequestId, termsAndConditions, digitalContract);
+
+        return response
+                .addAllAccounts(cuentas)
+                .build();
+    });
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    SubmitOnlineAgreementsHandlerDelegate submitOnlineAgreementsHandler =
+        async (ServerSubmitOnlineAgreementsRequest request) =>
+    {
+        var sourceFspId         = request.SourceFspId;
+        var destinationFspId    = request.DestinationFspId;
+        var onboardingRequestId = request.OnboardingRequestId;
+        var termsAndConditions  = request.TermsAndConditions;
+        var digitalContract     = request.DigitalContract;
+
+        var response = new ServerSubmitOnlineAgreementsResponse
+        {
+            // La fuente de la respuesta es el banco receptor (el nuestro)
+            SourceFspId         = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId    = sourceFspId,
+            OnboardingRequestId = onboardingRequestId,
+        };
+
+        // Verifica que ambos acuerdos hayan sido aceptados
+        if (!termsAndConditions.Accepted || !digitalContract.Accepted)
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "AGREEMENTS_NOT_ACCEPTED",
+                Message = "El cliente no aceptó los acuerdos requeridos.",
+            };
+            return response;
+        }
+
+        // Almacena los acuerdos y recupera las cuentas existentes del cliente
+        var cuentas = AlmacenarAcuerdosYObtenerCuentas(
+            onboardingRequestId, termsAndConditions, digitalContract);
+
+        response.Accounts.AddRange(cuentas);
+
+        return response;
+    };
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSubmitOnlineAgreementsHandler(submitOnlineAgreementsHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerSubmitOnlineAgreementsRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `onboardingRequestId` | `string` | Identificador del onboarding en línea en curso. |
+| `termsAndConditions` | `AgreementData` | Términos y condiciones presentados y aceptados por el Cliente. |
+| `digitalContract` | `AgreementData` | Contrato digital presentado y aceptado por el Cliente. |
+
+**AgreementData**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `version` | `string` | Versión del acuerdo presentado al Cliente. |
+| `content` | `string` | Contenido del acuerdo. |
+| `accepted` | `bool` | Indica si el Cliente aceptó el acuerdo. |
+| `acceptedAt` | `string` | Fecha y hora en que el Cliente aceptó el acuerdo. |
+
+Ver referencia completa: [ServerSubmitOnlineAgreementsRequest](/pch-switch-grpc-clients-doc/reference/server-submit-online-agreements-request/)
+
+## Respuesta (`ServerSubmitOnlineAgreementsResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `onboardingRequestId` | `string` | Sí | Identificador del onboarding (mismo que el recibido). |
+| `accounts` | `CustomerAccount[]` | Sí | Lista de cuentas existentes del Cliente. Vacía o ausente en caso de error. |
+| `error` | `ErrorResponse` | No | Incluir si los acuerdos no fueron aceptados o el Cliente no tiene cuentas disponibles. |
+
+**CustomerAccount**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP de origen de la cuenta. |
+| `destinationFspId` | `string` | FSP destino de la cuenta. |
+| `accountId` | `string` | Identificador de la cuenta. |
+| `accountNickname` | `string` | Alias de la cuenta. |
+| `currency` | `string` | Moneda de la cuenta. |
+| `isMainAccount` | `bool` | Indica si es la cuenta principal del Cliente. |
+
+Ver referencia completa: [ServerSubmitOnlineAgreementsResponse](/pch-switch-grpc-clients-doc/reference/server-submit-online-agreements-response/)
+
+## Cuando los acuerdos no son aceptados
+
+Si el Cliente no aceptó alguno de los acuerdos o no tiene cuentas disponibles, incluye un `ErrorResponse` en la respuesta y omite la lista de cuentas. Este paso devuelve las cuentas existentes del Cliente; no crea cuentas nuevas.

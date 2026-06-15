@@ -40,6 +40,11 @@ export default defineConfig({
 									collapsed: true,
 								},
 								{
+									label: 'Dar de alta un cliente en línea',
+									autogenerate: { directory: 'guides/pisp-flow/online-onboarding' },
+									collapsed: true,
+								},
+								{
 									label: 'Operaciones',
 									autogenerate: { directory: 'guides/pisp-flow/operations' },
 									collapsed: true,

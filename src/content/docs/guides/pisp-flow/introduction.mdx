@@ -33,6 +33,8 @@ Los métodos de onboarding buscan construir un flujo de autenticación seguro qu
 - La confirmación del onboarding exitoso, momento en el que el Participante emite el Consent Token.
 - La confirmación del offboarding de un Cliente, invalidando el Consent Token correspondiente.
 
+El Switch también contempla un **onboarding en línea**: una variante 100% digital del onboarding de cuentas existentes. El Cliente —que ya debe ser titular en el Participante y tener su información lista— verifica su número de teléfono, completa una entrevista KYC, acepta los acuerdos legales y selecciona sus cuentas, momento en el que el Participante emite el Consent Token. No crea Clientes ni cuentas nuevas: opera sobre cuentas que ya existen. Consulta el [Flujo de onboarding en línea](/pch-switch-grpc-clients-doc/guides/pisp-flow/online-onboarding/online-onboarding-flow/) para más detalle.
+
 ## Operaciones 3ppi
 
 Una vez completado el onboarding, los métodos de operación permiten al módulo 3ppi indicarle al Participante las acciones que el Cliente está solicitando desde la app PISP:

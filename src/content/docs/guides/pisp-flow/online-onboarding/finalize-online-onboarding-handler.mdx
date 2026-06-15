@@ -1,0 +1,209 @@
+---
+title: Finalizar onboarding en línea
+description: Cómo registrar un handler para finalizar el onboarding en línea, emitir el Consent Token y vincular las cuentas seleccionadas por el Cliente.
+sidebar:
+  order: 6
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Como último paso del onboarding en línea, el Cliente selecciona las cuentas que desea operar desde la app PISP y los tipos de acceso para cada una. El módulo 3ppi del Switch envía a tu banco una solicitud `FinalizeOnlineOnboarding` con esa selección, junto con el `deviceId` y la geolocalización. Si todo es correcto, tu banco debe generar el **Consent Token** y ligarlo a las cuentas y tipos de acceso seleccionados.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi finalice un onboarding en línea en tu banco.
+
+<Aside type="note">
+  Tu banco es responsable de:
+  - Verificar la integridad de la geolocalización recibida.
+  - Generar el Consent Token (se recomienda UUID v4).
+  - Almacenar la relación entre el Consent Token, las cuentas seleccionadas y los tipos de acceso autorizados, para poder validar operaciones futuras.
+  - Registrar la actividad por tratarse de una acción sensible.
+</Aside>
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si la geolocalización no es válida, no se pudo finalizar el onboarding o el `onboardingRequestId` no existe, responde con un `ErrorResponse`. No incluyas el `consentToken` en la respuesta en caso de error.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function finalizeOnlineOnboardingHandler(
+      request: ServerFinalizeOnlineOnboardingRequest,
+    ): Promise<ServerFinalizeOnlineOnboardingResponse> {
+      const sourceFspId         = request.getSourcefspid();
+      const destinationFspId    = request.getDestinationfspid();
+      const onboardingRequestId = request.getOnboardingrequestid();
+      const deviceId            = request.getDeviceid();
+      const accounts            = request.getAccountsList();
+      const geolocation         = request.getGeolocation();
+
+      const response = new ServerFinalizeOnlineOnboardingResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setOnboardingrequestid(onboardingRequestId);
+
+      // Verifica la integridad de la geolocalización
+      if (!validarGeolocalizacion(geolocation)) {
+        const error = new ErrorResponse();
+        error.setCode('INVALID_GEOLOCATION');
+        error.setMessage('La geolocalización enviada no es válida.');
+        response.setError(error);
+        return response;
+      }
+
+      // Guarda la información de la petición al ser una acción sensible.
+      // Durante el onboarding de un cliente no existe un sessionId, sólo el deviceId.
+      registrarActividad('FINALIZE_ONLINE_ONBOARDING', deviceId, null, geolocation);
+
+      // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
+      // con las cuentas y tipos de acceso seleccionados durante el onboarding
+      const consentToken = generarYAlmacenarConsentToken(onboardingRequestId, accounts);
+
+      response.setConsenttoken(consentToken);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setFinalizeOnlineOnboardingHandlerFn(finalizeOnlineOnboardingHandler);
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setFinalizeOnlineOnboardingHandlerFn(req -> {
+        String onboardingRequestId = req.getOnboardingRequestId();
+        String deviceId            = req.getDeviceId();
+        List<AccountAccessRequest> accounts = req.getAccountsList();
+        Geolocation geolocation    = req.getGeolocation();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId         = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId    = req.getSourceFspId();
+
+        ServerFinalizeOnlineOnboardingResponse.Builder response =
+                ServerFinalizeOnlineOnboardingResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId)
+                        .setOnboardingRequestId(onboardingRequestId);
+
+        // Verifica la integridad de la geolocalización
+        if (!verificarGeolocalizacion(geolocation)) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("INVALID_GEOLOCATION")
+                            .setMessage("La geolocalización enviada no es válida.")
+                            .build())
+                    .build();
+        }
+
+        // Guarda la información de la petición al ser una acción sensible.
+        // Durante el onboarding de un cliente no existe un sessionId, sólo el deviceId.
+        registrarActividad("FINALIZE_ONLINE_ONBOARDING", deviceId, null, geolocation);
+
+        // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
+        // con las cuentas y tipos de acceso seleccionados durante el onboarding
+        String consentToken = "consent-" + UUID.randomUUID().toString().replace("-", "");
+
+        return response
+                .setConsentToken(consentToken)
+                .build();
+    });
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    FinalizeOnlineOnboardingHandlerDelegate finalizeOnlineOnboardingHandler =
+        async (ServerFinalizeOnlineOnboardingRequest request) =>
+    {
+        var sourceFspId         = request.SourceFspId;
+        var destinationFspId    = request.DestinationFspId;
+        var onboardingRequestId = request.OnboardingRequestId;
+        var deviceId            = request.DeviceId;
+        var accounts            = request.Accounts;
+        var geolocation         = request.Geolocation;
+
+        var response = new ServerFinalizeOnlineOnboardingResponse
+        {
+            // La fuente de la respuesta es el banco receptor (el nuestro)
+            SourceFspId         = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId    = sourceFspId,
+            OnboardingRequestId = onboardingRequestId,
+        };
+
+        // Verifica la integridad de la geolocalización
+        if (!VerificarGeolocalizacion(geolocation))
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "INVALID_GEOLOCATION",
+                Message = "La geolocalización enviada no es válida.",
+            };
+            return response;
+        }
+
+        // Guarda la información de la petición al ser una acción sensible.
+        // Durante el onboarding de un cliente no existe un sessionId, sólo el deviceId.
+        registrarActividad("FINALIZE_ONLINE_ONBOARDING", deviceId, null, geolocation);
+
+        // Genera el Consent Token (se recomienda UUID v4) y almacena su relación
+        // con las cuentas y tipos de acceso seleccionados durante el onboarding
+        response.ConsentToken = GenerarYAlmacenarConsentToken(onboardingRequestId, accounts);
+
+        return response;
+    };
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setFinalizeOnlineOnboardingHandler(finalizeOnlineOnboardingHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerFinalizeOnlineOnboardingRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `onboardingRequestId` | `string` | Identificador del onboarding en línea en curso. |
+| `deviceId` | `string` | Identificador del dispositivo del Cliente. |
+| `accounts` | `AccountAccessRequest[]` | Cuentas seleccionadas por el Cliente y tipos de acceso solicitados para cada una. |
+| `geolocation` | `Geolocation` | Geolocalización asociada a la solicitud. |
+
+**AccountAccessRequest**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `accountId` | `string` | Identificador de la cuenta a vincular. |
+| `accessTypes` | `string[]` | Tipos de acceso solicitados para la cuenta (ej. lectura, transferencias). |
+| `currencyCode` | `string` | Moneda de la cuenta. |
+
+**Geolocation**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `latitude` | `string` | Latitud asociada a la solicitud. |
+| `longitude` | `string` | Longitud asociada a la solicitud. |
+| `createdAt` | `string` | Fecha y hora de captura de la geolocalización. |
+| `geolocationType` | `string` | Tipo de geolocalización (`IP_ADDRESS` o `GPS`). |
+
+Ver referencia completa: [ServerFinalizeOnlineOnboardingRequest](/pch-switch-grpc-clients-doc/reference/server-finalize-online-onboarding-request/)
+
+## Respuesta (`ServerFinalizeOnlineOnboardingResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `onboardingRequestId` | `string` | Sí | Identificador del onboarding (mismo que el recibido). |
+| `consentToken` | `string` | No | Consent Token generado por el banco. Solo presente si el onboarding se finalizó con éxito. |
+| `error` | `ErrorResponse` | No | Incluir si la geolocalización no es válida o no se pudo finalizar el onboarding. |
+
+Ver referencia completa: [ServerFinalizeOnlineOnboardingResponse](/pch-switch-grpc-clients-doc/reference/server-finalize-online-onboarding-response/)
+
+## Cuando no es posible finalizar
+
+Si la geolocalización no es válida o no se pudo finalizar el onboarding, incluye un `ErrorResponse` en la respuesta y omite el campo `consentToken`.

@@ -1,0 +1,167 @@
+---
+title: Validar OTP de onboarding en línea
+description: Cómo registrar un handler para validar el OTP que el Cliente ingresa durante el onboarding en línea.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Una vez que el Cliente ingresa el OTP en la app PISP, el módulo 3ppi del Switch envía a tu banco una solicitud `ValidateOnlineOnboardingOtp` con el código ingresado. Tu banco debe verificar que el OTP sea correcto y, si lo es, devolver el nombre completo del Cliente para continuar con el alta.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el módulo 3ppi intente validar el OTP de un onboarding en línea en curso.
+
+<Aside type="note">
+  Tu banco es responsable de:
+  - Verificar que el `otpToken` recibido coincida con el OTP almacenado para el `onboardingRequestId` y que no haya expirado.
+  - Devolver el nombre completo del Cliente (`fullName`) en caso de que el OTP sea válido.
+  - Invalidar el OTP una vez utilizado, independientemente del resultado.
+</Aside>
+
+<Aside type="caution">
+  El handler debe responder siempre dentro del tiempo límite. Si el OTP es incorrecto o ha expirado, responde con un `ErrorResponse`. No incluyas el `fullName` en la respuesta en caso de error.
+</Aside>
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function validateOnlineOnboardingOtpHandler(
+      request: ServerValidateOnlineOnboardingOtpRequest,
+    ): Promise<ServerValidateOnlineOnboardingOtpResponse> {
+      const sourceFspId         = request.getSourcefspid();
+      const destinationFspId    = request.getDestinationfspid();
+      const onboardingRequestId = request.getOnboardingrequestid();
+      const otpToken            = request.getOtptoken();
+
+      const response = new ServerValidateOnlineOnboardingOtpResponse();
+      // La fuente de la respuesta es el banco receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+      response.setOnboardingrequestid(onboardingRequestId);
+
+      // Verifica el OTP e invalídalo independientemente del resultado
+      const resultado = verificarEInvalidarOtp(onboardingRequestId, otpToken);
+
+      if (!resultado.valido) {
+        const error = new ErrorResponse();
+        error.setCode('INVALID_OTP');
+        error.setMessage('El OTP proporcionado es incorrecto o ha expirado.');
+        response.setError(error);
+        return response;
+      }
+
+      response.setFullname(resultado.fullName);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setValidateOnlineOnboardingOtpHandlerFn(validateOnlineOnboardingOtpHandler);
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setValidateOnlineOnboardingOtpHandlerFn(req -> {
+        String onboardingRequestId = req.getOnboardingRequestId();
+        String otpToken            = req.getOtpToken();
+        // La fuente de la respuesta es el banco receptor (el nuestro)
+        String sourceFspId         = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId    = req.getSourceFspId();
+
+        ServerValidateOnlineOnboardingOtpResponse.Builder response =
+                ServerValidateOnlineOnboardingOtpResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId)
+                        .setOnboardingRequestId(onboardingRequestId);
+
+        // Verifica el OTP e invalídalo independientemente del resultado
+        ResultadoOtp resultado = verificarEInvalidarOtp(onboardingRequestId, otpToken);
+
+        if (!resultado.esValido()) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode("INVALID_OTP")
+                            .setMessage("El OTP proporcionado es incorrecto o ha expirado.")
+                            .build())
+                    .build();
+        }
+
+        return response
+                .setFullName(resultado.getFullName())
+                .build();
+    });
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    ValidateOnlineOnboardingOtpHandlerDelegate validateOnlineOnboardingOtpHandler =
+        async (ServerValidateOnlineOnboardingOtpRequest request) =>
+    {
+        var sourceFspId         = request.SourceFspId;
+        var destinationFspId    = request.DestinationFspId;
+        var onboardingRequestId = request.OnboardingRequestId;
+        var otpToken            = request.OtpToken;
+
+        var response = new ServerValidateOnlineOnboardingOtpResponse
+        {
+            // La fuente de la respuesta es el banco receptor (el nuestro)
+            SourceFspId         = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId    = sourceFspId,
+            OnboardingRequestId = onboardingRequestId,
+        };
+
+        // Verifica el OTP e invalídalo independientemente del resultado
+        var resultado = VerificarEInvalidarOtp(onboardingRequestId, otpToken);
+
+        if (!resultado.Valido)
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "INVALID_OTP",
+                Message = "El OTP proporcionado es incorrecto o ha expirado.",
+            };
+            return response;
+        }
+
+        response.FullName = resultado.FullName;
+
+        return response;
+    };
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setValidateOnlineOnboardingOtpHandler(validateOnlineOnboardingOtpHandler);
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerValidateOnlineOnboardingOtpRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que origina la solicitud (módulo 3ppi del Switch). |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (tu banco). |
+| `onboardingRequestId` | `string` | Identificador del onboarding en línea en curso. |
+| `otpToken` | `string` | Código OTP ingresado por el Cliente en la app PISP. |
+
+Ver referencia completa: [ServerValidateOnlineOnboardingOtpRequest](/pch-switch-grpc-clients-doc/reference/server-validate-online-onboarding-otp-request/)
+
+## Respuesta (`ServerValidateOnlineOnboardingOtpResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (tu banco). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `onboardingRequestId` | `string` | Sí | Identificador del onboarding (mismo que el recibido). |
+| `fullName` | `string` | No | Nombre completo del Cliente. Solo presente si el OTP fue válido. |
+| `error` | `ErrorResponse` | No | Incluir si el OTP es incorrecto, ha expirado, o el onboarding no existe. |
+
+Ver referencia completa: [ServerValidateOnlineOnboardingOtpResponse](/pch-switch-grpc-clients-doc/reference/server-validate-online-onboarding-otp-response/)
+
+## Cuando el OTP no es válido
+
+Si el OTP es incorrecto o ha expirado, incluye un `ErrorResponse` en la respuesta y omite el campo `fullName`. El OTP debe invalidarse en ambos casos.
