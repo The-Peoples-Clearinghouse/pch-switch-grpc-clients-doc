@@ -18,11 +18,114 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
   No responder dentro del tiempo límite equivale a rechazar la transferencia. El handler debe responder siempre, incluso cuando la cuenta no pueda recibir los fondos.
 </Aside>
 
+## Verificar la firma de la solicitud
+
+`ServerAcceptTransferRequest` trae `payerSignature` (la firma original del pagador) y `switchRequestSignature` (el Switch sobre esa solicitud). El Switch cubre el contenido canónico de la solicitud **más** el `payerSignature` del pagador no el canónico solo, así podés detectar si el Switch alteró algo entre lo que el payer firmó y lo que te reenvió.
+
+Verificarla es recomendado y deberia hacelo antes de decidir si la cuenta puede recibir los fondos o cualquier otra situación es decir si la firma fue modificada no deberia aceptarse, la validacion se hace contra el CA de firma de Switch.
+ [inicializar el cliente](/pch-switch-grpc-clients-doc/getting-started/initialization). El contenido canónico es el mismo que el de `ExecuteTransfer` (ver [Firmar la transferencia](/pch-switch-grpc-clients-doc/guides/basic-flow/execute-transfer#firmar-la-transferencia)), tomado de los campos de `ServerAcceptTransferRequest`.
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    const canonical = buildTransferRequestCanonical({
+      homeTransactionId: request.getHometransactionid(),
+      fromFspId: from.getFspid(),
+      fromIdType: from.getIdtype(),
+      fromIdValue: from.getIdvalue(),
+      toFspId: to.getFspid(),
+      toIdType: to.getIdtype(),
+      toIdValue: to.getIdvalue(),
+      amountType: request.getAmounttype(),
+      currencyCode: amount.getCurrencycode(),
+      amount: amount.getAmount(),
+      scenario: request.getTransactiontype()!.getScenario(),
+      subScenario: request.getTransactiontype()!.getSubscenario(),
+      initiator: request.getTransactiontype()!.getInitiator(),
+      initiatorType: request.getTransactiontype()!.getInitiatortype(),
+      threeppiEnabled: request.getThreeppienabled(),
+      creationTimestamp: request.getCreationtimestamp(),
+    });
+    const validSwitchSignature = await transactionSigningHelper.validateSignatureAgainstCA(
+      canonical + '|' + request.getPayersignature(),
+      request.getSwitchrequestsignature()
+    );
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    boolean validSwitchSignature = grpcClient.verifyAcceptTransferRequestSignature(request);
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    var validSwitchSignature = await grpcClient.VerifyAcceptTransferRequestSignature(request);
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $validSwitchSignature = $client->verifyAcceptTransferRequestSignature($request);
+    ```
+  </TabItem>
+</Tabs>
+
+## Firmar la respuesta
+
+Antes de devolver `ServerAcceptTransferResponse`, firmalo con la llave de firma de transacciones en el campo `payeeSignature`. El Switch valida esta firma igual que valida la del pagador en `ExecuteTransfer`, y la exige en **todas** las respuestas, incluidas las de rechazo.
+
+El contenido canónico es el mismo formato que la respuesta de `ExecuteTransfer`: `transferId|homeTransactionId|errorCode|errorReason` unidos con `|` (`errorCode`/`errorReason` van vacíos cuando aceptás la transferencia).
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    const responseCanonical = buildTransferResponseCanonical({
+      transferId: response.getTransferid(),
+      homeTransactionId: response.getHometransactionid(),
+      errorCode: response.getError()?.getCode(),
+      errorReason: response.getError()?.getMessage(),
+    });
+    response.setPayeesignature(await transactionSigningHelper.signString(responseCanonical));
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    response = grpcClient.signAcceptTransferResponse(response);
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    response = await grpcClient.SignAcceptTransferResponse(response);
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $response = $client->signAcceptTransferResponse($response);
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+  Java, C# y PHP integran ambos pasos en el cliente (`verifyAcceptTransferRequestSignature`, `signAcceptTransferResponse`) — no necesitás armar el canónico a mano. TypeScript sí lo requiere explícitamente, como se muestra en el handler completo abajo.
+</Aside>
+
 ## Registrar el handler
 
 <Tabs syncKey="lenguaje">
   <TabItem label="TypeScript">
     ```typescript
+    // Firma la respuesta antes de devolverla — payeeSignature es obligatorio en todos los casos,
+    // incluidos los rechazos (ver Firmar la respuesta)
+    async function signed(r: ServerAcceptTransferResponse): Promise<ServerAcceptTransferResponse> {
+      const canonical = buildTransferResponseCanonical({
+        transferId: r.getTransferid(),
+        homeTransactionId: r.getHometransactionid(),
+        errorCode: r.getError()?.getCode(),
+        errorReason: r.getError()?.getMessage(),
+      });
+      r.setPayeesignature(await transactionSigningHelper.signString(canonical));
+      return r;
+    }
+
     async function acceptTransferHandler(
       request: ServerAcceptTransferRequest,
     ): Promise<ServerAcceptTransferResponse> {
@@ -42,7 +145,7 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
         errorResponse.setCode('MISSING_REQUIRED_FIELDS');
         errorResponse.setMessage('La solicitud no contiene los campos requeridos.');
         response.setError(errorResponse);
-        return response;
+        return signed(response);
       }
 
       const from   = request.getFrom();
@@ -54,18 +157,50 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
       // El destino de la respuesta es el banco que inició la transferencia
       response.setDestinationfspid(from.getFspid());
 
+      // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+      // (ver Verificar la firma de la solicitud)
+      const requestCanonical = buildTransferRequestCanonical({
+        homeTransactionId: request.getHometransactionid(),
+        fromFspId: from.getFspid(),
+        fromIdType: from.getIdtype(),
+        fromIdValue: from.getIdvalue(),
+        toFspId: to.getFspid(),
+        toIdType: to.getIdtype(),
+        toIdValue: to.getIdvalue(),
+        amountType: request.getAmounttype(),
+        currencyCode: amount.getCurrencycode(),
+        amount: amount.getAmount(),
+        scenario: request.getTransactiontype()!.getScenario(),
+        subScenario: request.getTransactiontype()!.getSubscenario(),
+        initiator: request.getTransactiontype()!.getInitiator(),
+        initiatorType: request.getTransactiontype()!.getInitiatortype(),
+        threeppiEnabled: request.getThreeppienabled(),
+        creationTimestamp: request.getCreationtimestamp(),
+      });
+      const validSwitchSignature = await transactionSigningHelper.validateSignatureAgainstCA(
+        requestCanonical + '|' + request.getPayersignature(),
+        request.getSwitchrequestsignature()
+      );
+      if (!validSwitchSignature) {
+        const errorResponse = new ErrorResponse();
+        errorResponse.setCode('INVALID_SIGNATURE');
+        errorResponse.setMessage('La firma del Switch sobre la solicitud no es válida.');
+        response.setError(errorResponse);
+        return signed(response);
+      }
+
       // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
       if (!laCuentaDestinoPuedeRecibirFondos(to.getIdvalue(), amount.getAmount())) {
         const errorResponse = new ErrorResponse();
         errorResponse.setCode('ACCOUNT_NOT_ACTIVE');
         errorResponse.setMessage('La cuenta no está activa o no puede recibir fondos.');
         response.setError(errorResponse);
-        return response;
+        return signed(response);
       }
 
       // Actualizar los saldos del beneficiario
 
-      return response;
+      return signed(response);
     }
 
     // Registra el handler en el cliente gRPC
@@ -74,6 +209,16 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
   </TabItem>
   <TabItem label="Java">
     ```java
+    // signAcceptTransferResponse declara "throws Exception" y el handler no puede propagarla
+    // (Function<ServerAcceptTransferRequest, ServerAcceptTransferResponse> no la declara)
+    static ServerAcceptTransferResponse signQuietly(GrpcSyncApiClient client, ServerAcceptTransferResponse response) {
+        try {
+            return client.signAcceptTransferResponse(response);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     grpcClient.setAcceptTransferHandlerFn(req -> {
         String  transferId        = req.getTransferId();
         String  homeTransactionId = req.getHomeTransactionId();
@@ -86,12 +231,11 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
 
         // From, To y Amount son opcionales — verificar antes de usar
         if (!req.hasFrom() || !req.hasTo() || !req.hasAmount()) {
-            return response
-                    .setError(ErrorResponse.newBuilder()
-                            .setCode("MISSING_REQUIRED_FIELDS")
-                            .setMessage("La solicitud no contiene los campos requeridos.")
-                            .build())
-                    .build();
+            response.setError(ErrorResponse.newBuilder()
+                    .setCode("MISSING_REQUIRED_FIELDS")
+                    .setMessage("La solicitud no contiene los campos requeridos.")
+                    .build());
+            return signQuietly(grpcClient, response.build());
         }
 
         // El origen de la respuesta es el banco receptor (el nuestro)
@@ -99,19 +243,32 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
         // El destino de la respuesta es el banco que inició la transferencia
         response.setDestinationFspId(req.getFrom().getFspId());
 
+        // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+        // (ver Verificar la firma de la solicitud)
+        try {
+            if (!grpcClient.verifyAcceptTransferRequestSignature(req)) {
+                response.setError(ErrorResponse.newBuilder()
+                        .setCode("INVALID_SIGNATURE")
+                        .setMessage("La firma del Switch sobre la solicitud no es válida.")
+                        .build());
+                return signQuietly(grpcClient, response.build());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
         // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
         if (!laCuentaDestinoPuedeRecibirFondos(req.getTo().getIdValue(), req.getAmount().getAmount())) {
-            return response
-                    .setError(ErrorResponse.newBuilder()
-                            .setCode("ACCOUNT_NOT_ACTIVE")
-                            .setMessage("La cuenta no está activa o no puede recibir fondos.")
-                            .build())
-                    .build();
+            response.setError(ErrorResponse.newBuilder()
+                    .setCode("ACCOUNT_NOT_ACTIVE")
+                    .setMessage("La cuenta no está activa o no puede recibir fondos.")
+                    .build());
+            return signQuietly(grpcClient, response.build());
         }
 
         // Actualizar los saldos del beneficiario
 
-        return response.build();
+        return signQuietly(grpcClient, response.build());
     });
     ```
   </TabItem>
@@ -139,13 +296,25 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
                 Code    = "MISSING_REQUIRED_FIELDS",
                 Message = "La solicitud no contiene los campos requeridos.",
             };
-            return response;
+            return await grpcClient.SignAcceptTransferResponse(response);
         }
 
         // El origen de la respuesta es el banco receptor (el nuestro)
         response.SourceFspId      = request.To.FspId;
         // El destino de la respuesta es el banco que inició la transferencia
         response.DestinationFspId = request.From.FspId;
+
+        // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+        // (ver Verificar la firma de la solicitud)
+        if (!await grpcClient.VerifyAcceptTransferRequestSignature(request))
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = "INVALID_SIGNATURE",
+                Message = "La firma del Switch sobre la solicitud no es válida.",
+            };
+            return await grpcClient.SignAcceptTransferResponse(response);
+        }
 
         // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
         if (!LaCuentaDestinoPuedeRecibirFondos(request.To.IdValue, request.Amount.Amount_))
@@ -155,12 +324,12 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
                 Code    = "ACCOUNT_NOT_ACTIVE",
                 Message = "La cuenta no está activa o no puede recibir fondos.",
             };
-            return response;
+            return await grpcClient.SignAcceptTransferResponse(response);
         }
 
         // Actualizar los saldos del beneficiario
 
-        return response;
+        return await grpcClient.SignAcceptTransferResponse(response);
     };
 
     // Registra el handler en el cliente gRPC
@@ -182,9 +351,10 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
 
         // From, To y Amount son opcionales — verificar antes de usar
         if (!$req->hasFrom() || !$req->hasTo() || !$req->hasAmount()) {
-            return $response->setError((new ErrorResponse())
+            $response->setError((new ErrorResponse())
                 ->setCode('MISSING_REQUIRED_FIELDS')
                 ->setMessage('La solicitud no contiene los campos requeridos.'));
+            return $client->signAcceptTransferResponse($response);
         }
 
         $from   = $req->getFrom();
@@ -196,16 +366,26 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
         // El destino de la respuesta es el banco que inició la transferencia
         $response->setDestinationFspId($from->getFspId());
 
+        // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+        // (ver Verificar la firma de la solicitud)
+        if (!$client->verifyAcceptTransferRequestSignature($req)) {
+            $response->setError((new ErrorResponse())
+                ->setCode('INVALID_SIGNATURE')
+                ->setMessage('La firma del Switch sobre la solicitud no es válida.'));
+            return $client->signAcceptTransferResponse($response);
+        }
+
         // Ejecuta reglas de negocio para determinar si la cuenta puede recibir los fondos
         if (!laCuentaDestinoPuedeRecibirFondos($to->getIdValue(), $amount->getAmount())) {
-            return $response->setError((new ErrorResponse())
+            $response->setError((new ErrorResponse())
                 ->setCode('ACCOUNT_NOT_ACTIVE')
                 ->setMessage('La cuenta no está activa o no puede recibir fondos.'));
+            return $client->signAcceptTransferResponse($response);
         }
 
         // Actualizar los saldos del beneficiario
 
-        return $response;
+        return $client->signAcceptTransferResponse($response);
     });
     ```
   </TabItem>
@@ -224,6 +404,10 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
 | `transactionType` | `TransactionType` | Categorización del tipo de transacción. |
 | `note` | `string` | Concepto del pago. |
 | `threeppiEnabled` | `boolean` | Indica si la transferencia usa flujo 3PPI. |
+| `extensions` | `ExtensionField[]` | Opcional. Pares clave/valor para datos adicionales del participante. |
+| `payerSignature` | `string` | Firma original del pagador sobre el contenido canónico de la solicitud. |
+| `switchRequestSignature` | `string` | El Switch sobre la solicitud del pagador — ver [Verificar la firma de la solicitud](#verificar-la-firma-de-la-solicitud). |
+| `creationTimestamp` | `string` | Epoch en milisegundos, como string, tomado de la solicitud original del pagador. Forma parte del contenido canónico a verificar. |
 
 Ver referencia completa: [ServerAcceptTransferRequest](/pch-switch-grpc-clients-doc/reference/server-accept-transfer-request/)
 
@@ -239,6 +423,7 @@ La respuesta indica al Switch si la transferencia fue aceptada. Si no se incluye
 | `destinationFspId` | `string` | Sí | FSP destino de la respuesta (el banco emisor). |
 | `threeppiEnabled` | `boolean` | Sí | Mismo valor recibido en la solicitud. |
 | `error` | `ErrorResponse` | No | Omitir para aceptar. Incluir con `code` y `message` para rechazar. |
+| `payeeSignature` | `string` | Sí | Firma del beneficiario sobre el contenido canónico de la respuesta — obligatoria en todos los casos, incluidos los rechazos. Ver [Firmar la respuesta](#firmar-la-respuesta). |
 
 Ver referencia completa: [ServerAcceptTransferResponse](/pch-switch-grpc-clients-doc/reference/server-accept-transfer-response/)
 

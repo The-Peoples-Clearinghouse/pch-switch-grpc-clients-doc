@@ -25,8 +25,8 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     const clientSecurityOptions: IGrpcClientSecurityOptions = {
       mode: "SERVER_TLS",
       caCertFilePath: "./certs/hub-intermediate.pem",
-      clientPrivateKeyFilePath: "./certs/participante.key",
-      clientCertFilePath: "./certs/participante.pem",
+      clientPrivateKeyFilePath: "./certs/participant_authentication.key",
+      clientCertFilePath: "./certs/participant_authentication.pem",
     };
 
     // Lee el certificado del participante como texto PEM
@@ -39,6 +39,14 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     const cryptoAndCertHelper = new CryptoAndCertHelper(
       clientSecurityOptions.clientPrivateKeyFilePath!,
       clientSecurityOptions.caCertFilePath!
+    );
+
+    // Segunda instancia de CryptoAndCertHelper, con las llaves de firma de transacciones.
+    // No participa en StartStream: guárdala para firmar payerSignature/payeeSignature
+    // cuando ejecutes una transferencia (ver la guía de Ejecutar transferencia).
+    const transactionSigningHelper = new CryptoAndCertHelper(
+      "./certs/participant_transaction_signing.key",
+      "./certs/hub-intermediate-transaction-signing"
     );
 
     const grpcClient = new GrpcSyncApiClient(
@@ -68,11 +76,21 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
       StandardCharsets.UTF_8
     );
     String clientPrivateKey = new String(
-      Files.readAllBytes(Paths.get("./certs/participante.key")),
+      Files.readAllBytes(Paths.get("./certs/participant_authentication.key")),
       StandardCharsets.UTF_8
     );
     String clientCertPem = new String(
-      Files.readAllBytes(Paths.get("./certs/participante.pem")),
+      Files.readAllBytes(Paths.get("./certs/participant_authentication.pem")),
+      StandardCharsets.UTF_8
+    );
+
+    // Llaves de firma de transacciones — jerarquía de CA distinta a la de autenticación.
+    String transactionSigningCaCertPem = new String(
+      Files.readAllBytes(Paths.get("./certs/hub-intermediate-transaction-signing")),
+      StandardCharsets.UTF_8
+    );
+    String transactionSigningKey = new String(
+      Files.readAllBytes(Paths.get("./certs/participant_transaction_signing.key")),
       StandardCharsets.UTF_8
     );
 
@@ -81,14 +99,22 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     // CryptoAndCertHelper maneja la firma y validación criptográfica del flujo StartStream
     CryptoAndCertHelper cryptoHelper = new CryptoAndCertHelper(clientPrivateKey, caCertPem);
 
+    // Segunda instancia, con las llaves de firma de transacciones. El constructor la exige
+    // — no hay fallback, ni siquiera para desarrollo local.
+    CryptoAndCertHelper transferCryptoHelper =
+      new CryptoAndCertHelper(transactionSigningKey, transactionSigningCaCertPem);
+
     GrpcSyncApiClient grpcClient = new GrpcSyncApiClient(
-        "switch.camara.mx:443",  // dirección del servidor gRPC
-        "MIBANCO",               // fspId: debe coincidir con el del certificado
+        "switch.camara.mx:443",   // dirección del servidor gRPC
+        "MIBANCO",                // fspId: debe coincidir con el del certificado
         clientCertPem,
         clientPrivateKey,
         caCertPem,
         cryptoHelper,
-        clientSecurityOptions
+        transferCryptoHelper,     // firma/verifica payerSignature, payeeSignature y las firmas del switch
+        clientSecurityOptions,
+        true,                     // mainClient
+        5000                      // grpcConnectTimeOutMs
     );
 
     if (!grpcClient.init()) {
@@ -102,11 +128,17 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     using Pch.GrpcSyncApi.CSharp.Client;
     using Pch.GrpcSyncApi.CSharp.Client.Crypto;
 
-    var clientCertPem = File.ReadAllText("./certs/participante.pem");
-    var clientPrivateKeyPem = File.ReadAllText("./certs/participante.key");
+    var clientCertPem = File.ReadAllText("./certs/participant_authentication.pem");
+    var clientPrivateKeyPem = File.ReadAllText("./certs/participant_authentication.key");
     var caIntermediateCertPem = File.ReadAllText("./certs/hub-intermediate.pem");
 
     var cryptoHelper = new CryptoAndCertHelper(clientPrivateKeyPem, caIntermediateCertPem);
+
+    // Llaves de firma de transacciones — jerarquía de CA distinta a la de autenticación.
+    // El constructor la exige: no hay fallback, ni siquiera para desarrollo local.
+    var transactionSigningKeyPem = File.ReadAllText("./certs/participant_transaction_signing.key");
+    var transactionSigningCaCertPem = File.ReadAllText("./certs/hub-intermediate-transaction-signing");
+    var transferCryptoHelper = new CryptoAndCertHelper(transactionSigningKeyPem, transactionSigningCaCertPem);
 
     var securityOptions = new GrpcSecurityOptions
     {
@@ -114,12 +146,13 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     };
 
     var grpcClient = new GrpcSyncApiClient(
-        "switch.camara.mx:443",  // dirección del servidor gRPC
-        "MIBANCO",               // fspId: debe coincidir con el del certificado
+        "switch.camara.mx:443",   // dirección del servidor gRPC
+        "MIBANCO",                // fspId: debe coincidir con el del certificado
         clientCertPem,
         clientPrivateKeyPem,
         caIntermediateCertPem,
         cryptoHelper,
+        transferCryptoHelper,     // firma/verifica payerSignature, payeeSignature y las firmas del switch
         securityOptions
     );
 
@@ -131,18 +164,25 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     ```php
     use Pch\Interop\InteropGrpcApiClient;
 
-    $clientPrivateKey = file_get_contents('./certs/participante.key');
-    $clientCertPem    = file_get_contents('./certs/participante.pem');
+    $clientPrivateKey = file_get_contents('./certs/participant_authentication.key');
+    $clientCertPem    = file_get_contents('./certs/participant_authentication.pem');
     $caCertPem        = file_get_contents('./certs/hub-intermediate.pem');
 
+    // Llaves de firma de transacciones — jerarquía de CA distinta a la de autenticación.
+    // El constructor las exige: no hay fallback, ni siquiera para desarrollo local.
+    $transferSigningKeyPem = file_get_contents('./certs/participant_transaction_signing.key');
+    $transferCaCertPem     = file_get_contents('./certs/hub-intermediate-transaction-signing');
+
     $client = new InteropGrpcApiClient(
-        serviceUrl:       'switch.camara.mx:443',  // dirección del servidor gRPC
-        fspId:            'MIBANCO',               // fspId: debe coincidir con el del certificado
-        clientCertPem:    $clientCertPem,
-        clientPrivateKey: $clientPrivateKey,
-        caCertPem:        $caCertPem,
-        mainClient:       true,
-        securityMode:     InteropGrpcApiClient::SECURITY_MODE_SERVER_TLS,
+        serviceUrl:            'switch.camara.mx:443',  // dirección del servidor gRPC
+        fspId:                 'MIBANCO',               // fspId: debe coincidir con el del certificado
+        clientCertPem:         $clientCertPem,
+        clientPrivateKey:      $clientPrivateKey,
+        caCertPem:             $caCertPem,
+        transferSigningKeyPem: $transferSigningKeyPem,  // firma payerSignature/payeeSignature
+        transferCaCertPem:     $transferCaCertPem,       // verifica las firmas del switch
+        mainClient:            true,
+        securityMode:          InteropGrpcApiClient::SECURITY_MODE_SERVER_TLS,
     );
 
     if (!$client->init()) {
@@ -150,6 +190,10 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     }
     echo "Cliente conectado y autenticado\n";
     ```
+
+    <Aside type="note">
+      El cliente PHP no usa una interfaz `ICryptoAndCertHelper` inyectable como Java/C#/TypeScript — recibe las llaves PEM directamente en el constructor y firma internamente. La sección [CryptoAndCertHelper](#cryptoandcerthelper) más abajo no aplica a PHP.
+    </Aside>
   </TabItem>
 </Tabs>
 
@@ -167,15 +211,29 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
 |---|---|
 | `fspId` | Identificador del participante. Debe coincidir exactamente con el del certificado. |
 | `host` | Dirección y puerto del Switch (proporcionados por la Cámara). |
-| `privateKeyPath` | Ruta al archivo `participante.key`. |
-| `certificatePath` | Ruta al archivo `participante.pem`. |
+| `privateKeyPath` | Ruta al archivo `participant_authentication.key`. |
+| `certificatePath` | Ruta al archivo `participant_authentication.pem`. |
 | `caCertificatePath` | Ruta al archivo `hub-intermediate.pem`. |
+
+Además, para poder firmar transferencias más adelante, ten disponibles desde el arranque:
+
+| Parámetro | Descripción |
+|---|---|
+| `transactionSigningPrivateKeyPath` | Ruta al archivo `participant_transaction_signing.key`. |
+| `transactionSigningCaCertificatePath` | Ruta al archivo `hub-intermediate-transaction-signing`. |
 
 ## CryptoAndCertHelper
 
-`CryptoAndCertHelper` es la implementación de referencia proporcionada por la Cámara para el manejo criptográfico del flujo `StartStream`. Se encarga de firmar el reto enviado por el Switch y de validar la firma de respuesta del hub.
+`CryptoAndCertHelper` es la implementación de referencia proporcionada por la Cámara para el manejo criptográfico de firmas. Aplica a **TypeScript, Java y C#** (PHP no usa esta interfaz — ver la nota en su pestaña de la sección anterior). Vas a instanciarla dos veces, una por cada jerarquía de certificados:
 
-El cliente acepta cualquier objeto que implemente la interfaz `ICryptoAndCertHelper`:
+- La instancia construida con las llaves de **autenticación** se pasa al constructor de `GrpcSyncApiClient` en los tres lenguajes, y el cliente la usa internamente para firmar el reto y validar la firma de respuesta del hub durante `StartStream`.
+- La instancia construida con las llaves de **firma de transacciones** se comporta distinto según el lenguaje:
+  - En **Java y C#**, el constructor de `GrpcSyncApiClient` la exige como segundo parámetro (`transferCryptoAndCertHelper`) — es obligatoria, no hay fallback. El cliente la usa internamente en `signTransferRequest(request)` y `verifyTransferResponseSignature(response)`, así que no necesitás armar el string canónico a mano.
+  - En **TypeScript**, el cliente no la recibe ni la usa — la mantiene tu aplicación y la usás directamente con `signString` para firmar `payerSignature`/`payeeSignature`, armando el contenido canónico vos mismo (ver la guía de Ejecutar transferencia).
+
+Ambas instancias exponen la misma interfaz; solo cambian las llaves con las que se construyen.
+
+En TypeScript, el cliente acepta cualquier objeto que implemente la interfaz `ICryptoAndCertHelper`:
 
 ```typescript
 export interface ICryptoAndCertHelper {
@@ -188,10 +246,14 @@ export interface ICryptoAndCertHelper {
 }
 ```
 
-La implementación de la Cámara cubre los dos métodos requeridos:
+Java y C# exponen la misma interfaz más un tercer método, usado por `verifyTransferResponseSignature` y las demás verificaciones del flujo de transferencia:
 
-- **`signString`** — Firma el reto con la llave privada del participante usando RSA + SHA-256. Devuelve la firma en Base64.
-- **`validateSignature`** — Verifica la firma del hub usando la llave pública extraída del certificado intermedio de la CA (`hub-intermediate.pem`). Antes de verificar, compara el fingerprint de la llave pública recibida contra el del certificado cargado; si no coinciden, rechaza la validación sin intentar verificar. La firma Base64 se decodifica como `binary` antes de pasarla al verificador.
+- **`verifySwitchSignature(data, signature)`** — Verifica una firma del switch usando la llave pública del certificado CA cargado en esa instancia (sin comparar fingerprint, a diferencia de `validateSignature`, que sí lo hace y solo aplica al handshake inicial).
+
+La implementación de la Cámara cubre los métodos requeridos:
+
+- **`signString`** — Firma el reto (o, en la instancia de firma de transacciones, el contenido canónico) con la llave privada correspondiente usando RSA + SHA-256. Devuelve la firma en Base64.
+- **`validateSignature`** — Verifica la firma del hub durante `StartStream`, usando la llave pública extraída del certificado intermedio de la CA cargado en esa instancia. Antes de verificar, compara el fingerprint de la llave pública recibida contra el del certificado cargado; si no coinciden, rechaza la validación sin intentar verificar. La firma llega en Base64 y se decodifica como tal antes de pasarla al verificador.
 
 <Aside type="tip">
   Puedes proporcionar tu propia implementación de `ICryptoAndCertHelper` si necesitas integrar con un HSM, un servicio de firma externo, o un algoritmo diferente. Solo asegúrate de que `signString` produzca una firma compatible con el algoritmo configurado en el Switch para tu participante.
