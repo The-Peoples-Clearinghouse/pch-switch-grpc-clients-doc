@@ -47,7 +47,7 @@ Con el proceso anterior completo, el participante dispone de los archivos que el
 | `participant_authentication.pem` | Emitido por la Cámara | Certificado cliente de autenticación, firmado por la CA Intermedia de autenticación. |
 | `hub-intermediate.pem` | Provisto por la Cámara | Certificado de la CA Intermedia de autenticación. |
 | `participant_transaction_signing.key` | Generado por el participante | Clave privada de firma de transacciones. Nunca se comparte. |
-| `hub-intermediate-transaction-signing` | Provisto por la Cámara | Certificado de la CA Intermedia de firma de transferencia. |
+| `hub-intermediate-transaction-signing.pem` | Provisto por la Cámara | Certificado de la CA Intermedia de firma de transferencia. |
 
 ### FSPID y certificado
 
@@ -67,7 +67,7 @@ Al configurar el cliente, asegúrate de:
 - Proporcionar la ruta o el contenido de `participant_authentication.pem` (certificado cliente de autenticación).
 - Proporcionar la ruta o el contenido de `hub-intermediate.pem` como trust anchor para validar el servidor.
 - Proporcionar la ruta o el contenido de `participant_transaction_signing.key` (clave privada de firma de transacciones) — no se usa en el stream, pero debe estar disponible para firmar transferencias.
-- Proporcionar la ruta o el contenido de `hub-intermediate-transaction-signing` como trust anchor para validar las firmas de transacciones del Switch.
+- Proporcionar la ruta o el contenido de `hub-intermediate-transaction-signing.pem` como trust anchor para validar las firmas de transacciones del Switch.
 - No activar el modo insecure bajo ninguna circunstancia.
 - Que el `FspId` configurado en el cliente corresponda al `FspId` del certificado.
 
@@ -121,6 +121,6 @@ El cliente ya implementa el proceso de firma internamente. Los parámetros utili
 
 ## Entorno de Pruebas
 
-Durante la fase inicial de integración, la Cámara puede encargarse de la generación, gestión y rotación de los certificados del participante. En ese caso, la Cámara entregará directamente los archivos necesarios de ambas jerarquías (`participant_authentication.key`, `participant_authentication.pem`, `hub-intermediate.pem`, `participant_transaction_signing.key`, `hub-intermediate-transaction-signing`) sin que el participante deba generar ningún CSR.
+Durante la fase inicial de integración, la Cámara puede encargarse de la generación, gestión y rotación de los certificados del participante. En ese caso, la Cámara entregará directamente los archivos necesarios de ambas jerarquías (`participant_authentication.key`, `participant_authentication.pem`, `hub-intermediate.pem`, `participant_transaction_signing.key`, `hub-intermediate-transaction-signing.pem`) sin que el participante deba generar ningún CSR.
 
 Para entornos productivos, el flujo estándar de emisión descrito en la sección anterior aplica en su totalidad.

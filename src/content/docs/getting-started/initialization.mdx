@@ -46,7 +46,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     // cuando ejecutes una transferencia (ver la guía de Ejecutar transferencia).
     const transactionSigningHelper = new CryptoAndCertHelper(
       "./certs/participant_transaction_signing.key",
-      "./certs/hub-intermediate-transaction-signing"
+      "./certs/hub-intermediate-transaction-signing.pem"
     );
 
     const grpcClient = new GrpcSyncApiClient(
@@ -86,7 +86,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
 
     // Llaves de firma de transacciones — jerarquía de CA distinta a la de autenticación.
     String transactionSigningCaCertPem = new String(
-      Files.readAllBytes(Paths.get("./certs/hub-intermediate-transaction-signing")),
+      Files.readAllBytes(Paths.get("./certs/hub-intermediate-transaction-signing.pem")),
       StandardCharsets.UTF_8
     );
     String transactionSigningKey = new String(
@@ -112,9 +112,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
         caCertPem,
         cryptoHelper,
         transferCryptoHelper,     // firma/verifica payerSignature, payeeSignature y las firmas del switch
-        clientSecurityOptions,
-        true,                     // mainClient
-        5000                      // grpcConnectTimeOutMs
+        clientSecurityOptions
     );
 
     if (!grpcClient.init()) {
@@ -137,7 +135,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     // Llaves de firma de transacciones — jerarquía de CA distinta a la de autenticación.
     // El constructor la exige: no hay fallback, ni siquiera para desarrollo local.
     var transactionSigningKeyPem = File.ReadAllText("./certs/participant_transaction_signing.key");
-    var transactionSigningCaCertPem = File.ReadAllText("./certs/hub-intermediate-transaction-signing");
+    var transactionSigningCaCertPem = File.ReadAllText("./certs/hub-intermediate-transaction-signing.pem");
     var transferCryptoHelper = new CryptoAndCertHelper(transactionSigningKeyPem, transactionSigningCaCertPem);
 
     var securityOptions = new GrpcSecurityOptions
@@ -171,7 +169,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
     // Llaves de firma de transacciones — jerarquía de CA distinta a la de autenticación.
     // El constructor las exige: no hay fallback, ni siquiera para desarrollo local.
     $transferSigningKeyPem = file_get_contents('./certs/participant_transaction_signing.key');
-    $transferCaCertPem     = file_get_contents('./certs/hub-intermediate-transaction-signing');
+    $transferCaCertPem     = file_get_contents('./certs/hub-intermediate-transaction-signing.pem');
 
     $client = new InteropGrpcApiClient(
         serviceUrl:            'switch.camara.mx:443',  // dirección del servidor gRPC
@@ -180,9 +178,7 @@ Una vez inicializado, el cliente establece el stream autenticado mediante `Start
         clientPrivateKey:      $clientPrivateKey,
         caCertPem:             $caCertPem,
         transferSigningKeyPem: $transferSigningKeyPem,  // firma payerSignature/payeeSignature
-        transferCaCertPem:     $transferCaCertPem,       // verifica las firmas del switch
-        mainClient:            true,
-        securityMode:          InteropGrpcApiClient::SECURITY_MODE_SERVER_TLS,
+        transferCaCertPem:     $transferCaCertPem,      // verifica las firmas del switch
     );
 
     if (!$client->init()) {
@@ -220,7 +216,7 @@ Además, para poder firmar transferencias más adelante, ten disponibles desde e
 | Parámetro | Descripción |
 |---|---|
 | `transactionSigningPrivateKeyPath` | Ruta al archivo `participant_transaction_signing.key`. |
-| `transactionSigningCaCertificatePath` | Ruta al archivo `hub-intermediate-transaction-signing`. |
+| `transactionSigningCaCertificatePath` | Ruta al archivo `hub-intermediate-transaction-signing.pem`. |
 
 ## CryptoAndCertHelper
 

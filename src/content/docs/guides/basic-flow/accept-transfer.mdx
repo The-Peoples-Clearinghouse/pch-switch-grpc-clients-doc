@@ -20,7 +20,7 @@ Para recibir estas solicitudes, debes registrar un **handler** (callback) en el 
 
 ## Verificar la firma de la solicitud
 
-`ServerAcceptTransferRequest` trae `payerSignature` (la firma original del pagador) y `switchRequestSignature` (el Switch sobre esa solicitud). El Switch cubre el contenido canónico de la solicitud **más** el `payerSignature` del pagador no el canónico solo, así podés detectar si el Switch alteró algo entre lo que el payer firmó y lo que te reenvió.
+`ServerAcceptTransferRequest` trae `payerSignature` (la firma original del pagador) y `switchRequestSignature` (el Switch sobre esa solicitud). El Switch cubre el contenido canónico de la solicitud **más** el `payerSignature` del pagador no el canónico solo, así podés detectar si el Switch alteró algo entre lo que el pagador firmó y lo que te reenvió.
 
 Verificarla es recomendado y deberia hacelo antes de decidir si la cuenta puede recibir los fondos o cualquier otra situación es decir si la firma fue modificada no deberia aceptarse, la validacion se hace contra el CA de firma de Switch.
  [inicializar el cliente](/pch-switch-grpc-clients-doc/getting-started/initialization). El contenido canónico es el mismo que el de `ExecuteTransfer` (ver [Firmar la transferencia](/pch-switch-grpc-clients-doc/guides/basic-flow/execute-transfer#firmar-la-transferencia)), tomado de los campos de `ServerAcceptTransferRequest`.
@@ -157,7 +157,7 @@ El contenido canónico es el mismo formato que la respuesta de `ExecuteTransfer`
       // El destino de la respuesta es el banco que inició la transferencia
       response.setDestinationfspid(from.getFspid());
 
-      // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+      // Verifica que el Switch no haya alterado la solicitud del pagador al reenviarla
       // (ver Verificar la firma de la solicitud)
       const requestCanonical = buildTransferRequestCanonical({
         homeTransactionId: request.getHometransactionid(),
@@ -243,7 +243,7 @@ El contenido canónico es el mismo formato que la respuesta de `ExecuteTransfer`
         // El destino de la respuesta es el banco que inició la transferencia
         response.setDestinationFspId(req.getFrom().getFspId());
 
-        // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+        // Verifica que el Switch no haya alterado la solicitud del pagador al reenviarla
         // (ver Verificar la firma de la solicitud)
         try {
             if (!grpcClient.verifyAcceptTransferRequestSignature(req)) {
@@ -304,7 +304,7 @@ El contenido canónico es el mismo formato que la respuesta de `ExecuteTransfer`
         // El destino de la respuesta es el banco que inició la transferencia
         response.DestinationFspId = request.From.FspId;
 
-        // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+        // Verifica que el Switch no haya alterado la solicitud del pagador al reenviarla
         // (ver Verificar la firma de la solicitud)
         if (!await grpcClient.VerifyAcceptTransferRequestSignature(request))
         {
@@ -366,7 +366,7 @@ El contenido canónico es el mismo formato que la respuesta de `ExecuteTransfer`
         // El destino de la respuesta es el banco que inició la transferencia
         $response->setDestinationFspId($from->getFspId());
 
-        // Verifica que el Switch no haya alterado la solicitud del payer al reenviarla
+        // Verifica que el Switch no haya alterado la solicitud del pagador al reenviarla
         // (ver Verificar la firma de la solicitud)
         if (!$client->verifyAcceptTransferRequestSignature($req)) {
             $response->setError((new ErrorResponse())

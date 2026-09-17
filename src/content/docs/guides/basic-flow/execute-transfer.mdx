@@ -9,15 +9,13 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 `ExecuteTransfer` es una llamada gRPC que permite enviar una transferencia de dinero desde un participante A a un participante B. La transferencia se realiza de manera **definitiva e irrevocable** una vez que el banco receptor la acepta.
 
-En versiones anteriores a la 0.2.0 de los clientes gRPC, la forma de generar una transferencia era diferente, es decir antes se generaba con los datos necesarios que el executeTransfer requería. Sin embargo en las versiones posteriores se agrego el proceso de firma del contenido de la transferencia, por lo cual ahora el payer dentro del contenido de una transferencia debe mandar una firma de lo que el dice haber mandado, y el switch valida que la firma sea correcta creando una nueva firma con el contenido recibido y comparando ambas firmas. Si las firmas no coinciden, el switch devuelve un error de firma inválida. Por lo cual es importante que se actualicen los clientes gRPC a la versión 0.2.0 o superior.
-
 Este paso requiere los datos del beneficiario obtenidos previamente con [`LookupParty`](/pch-switch-grpc-clients-doc/guides/basic-flow/lookup-party).
 
 ![Flujo de transferencia](../../../../assets/transfer-flow.webp)
 
 ## Firmar la transferencia
 
-El payer debe firmar el contenido de cada `TransferRequest` con la llave privada de **firma de transacciones** (`participant_transaction_signing.key` distinta de la llave de autenticación; ver [Seguridad](/pch-switch-grpc-clients-doc/getting-started/security) e [Inicialización del cliente](/pch-switch-grpc-clients-doc/getting-started/initialization)). El Switch reconstruye el mismo contenido canónico con los datos que recibió y compara ambas firmas si no coinciden, rechaza la transferencia con un error de firma inválida.
+El pagador debe firmar el contenido de cada `TransferRequest` con la llave privada de **firma de transacciones** (`participant_transaction_signing.key` distinta de la llave de autenticación; ver [Seguridad](/pch-switch-grpc-clients-doc/getting-started/security) e [Inicialización del cliente](/pch-switch-grpc-clients-doc/getting-started/initialization)). El Switch reconstruye el mismo contenido canónico con los datos que recibió y compara ambas firmas si no coinciden, rechaza la transferencia con un error de firma inválida.
 
 ### Contenido canónico
 
