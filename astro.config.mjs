@@ -48,6 +48,11 @@ export default defineConfig({
 									label: 'Operaciones',
 									autogenerate: { directory: 'guides/pisp-flow/operations' },
 									collapsed: true,
+								},
+								{
+									label: 'Pagos offline',
+									autogenerate: { directory: 'guides/pisp-flow/offline-payments' },
+									collapsed: true,
 								}
 							],
 						},

@@ -1,0 +1,414 @@
+---
+title: Acreditar un pago offline
+description: Cómo registrar un handler para consumir la reserva de fondos y ejecutar la transferencia correspondiente a un pago offline.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando el dispositivo del pagador o del beneficiario recupera la conexión, la app PISP presenta el pago offline. Después de validarlo, el Switch envía al Participante del pagador una solicitud `SettleOfflineTransfer`. El Participante debe consumir el monto de la reserva offline del pagador y ejecutar la transferencia hacia el beneficiario.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función una vez por cada pago offline a acreditar.
+
+<Aside type="note">
+  La solicitud no incluye el identificador de la reserva ni de la cuenta. Localiza la cuenta del pagador con el `payerId` y la `currency` del pago, y usa la reserva offline asociada a esa cuenta.
+</Aside>
+
+<Aside type="caution">
+  El mismo pago puede llegar más de una vez, ya que tanto el pagador como el beneficiario pueden presentarlo. **Solo la primera solicitud válida debe generar el cargo.** Si recibes un `transactionId` que ya procesaste, responde con el mismo resultado de la primera vez, sin volver a debitar la reserva.
+</Aside>
+
+## Ejecutar la transferencia
+
+Una vez validada la reserva, el Participante ejecuta la transferencia según dónde se encuentre el beneficiario:
+
+- **Beneficiario en el mismo Participante** (`payeeFspId` igual al FSP del Participante): realiza una transferencia interna entre la cuenta del pagador y la del beneficiario.
+- **Beneficiario en otro Participante**: ejecuta la transferencia hacia el Switch mediante [`ExecuteTransfer`](/pch-switch-grpc-clients-doc/guides/basic-flow/execute-transfer/), usando el `transactionId` del pago offline e indicando `'OFFLINE_TRANSFER'` como `scenario` en el `transactionType`.
+
+Solo después de que la transferencia se complete, descuenta el monto de la reserva.
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function settleOfflineTransferHandler(
+      request: ServerSettleOfflineTransferRequest,
+    ): Promise<ServerSettleOfflineTransferResponse> {
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const offlineTransfer  = request.getOfflinetransfer();
+
+      const transactionId = offlineTransfer.getTransactionid();
+      const amount        = offlineTransfer.getAmount();
+      const currency      = offlineTransfer.getCurrency();
+      const note          = offlineTransfer.getNote();
+      const payerId       = offlineTransfer.getPayerid();
+      const payeeFspId    = offlineTransfer.getPayeefspid();
+      const payeeId       = offlineTransfer.getPayeeid();
+
+      const response = new ServerSettleOfflineTransferResponse();
+      // La fuente de la respuesta es el Participante receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+
+      const result = new SettleOfflineTransferResult();
+      result.setTransactionid(transactionId);
+      response.setResult(result);
+
+      const rechazar = (codigo: string) => {
+        result.setSuccess(false);
+        result.setErrorcode(codigo);
+        return response;
+      };
+
+      // Si el pago ya se procesó, devuelve el mismo resultado sin volver a debitar
+      const resultadoPrevio = buscarResultadoDePagoOffline(transactionId);
+      if (resultadoPrevio) {
+        result.setSuccess(resultadoPrevio.exitoso);
+        if (resultadoPrevio.codigoError) result.setErrorcode(resultadoPrevio.codigoError);
+        return response;
+      }
+
+      // Localiza la cuenta del pagador por su identificador y la moneda del pago
+      const cuentaPagador = buscarCuentaPorPartyId(payerId, currency);
+      if (!cuentaPagador) return rechazar('ACCOUNT_NOT_FOUND');
+
+      // Verifica que la reserva exista, siga vigente y cubra el monto
+      const reserva = obtenerReservaOffline(cuentaPagador);
+      const codigoReserva = validarReserva(reserva, amount);
+      if (codigoReserva) return rechazar(codigoReserva);
+
+      let transferenciaExitosa: boolean;
+
+      if (payeeFspId === MI_FSP_ID) {
+        // Beneficiario en el mismo Participante: transferencia interna
+        const cuentaBeneficiario = buscarCuentaPorPartyId(payeeId, currency);
+        if (!cuentaBeneficiario) return rechazar('PAYEE_ACCOUNT_NOT_FOUND');
+
+        transferenciaExitosa = await transferenciaInterna(
+          transactionId, amount, cuentaPagador, cuentaBeneficiario, note);
+      } else {
+        // Beneficiario en otro Participante: ExecuteTransfer con escenario OFFLINE_TRANSFER
+        // Ver: /guides/basic-flow/execute-transfer/
+        transferenciaExitosa = await ejecutarTransferencia({
+          transactionId,
+          amount,
+          currency,
+          payerId,
+          payeeId,
+          payeeFsp: payeeFspId,
+          note,
+          scenario: 'OFFLINE_TRANSFER',
+        });
+      }
+
+      if (!transferenciaExitosa) return rechazar('TRANSFER_EXECUTION_FAILED');
+
+      // Descuenta el monto de la reserva una vez completada la transferencia
+      consumirReserva(reserva, amount);
+      guardarResultadoDePagoOffline(transactionId, { exitoso: true });
+
+      result.setSuccess(true);
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSettleOfflineTransferRequestHandlerFn(settleOfflineTransferHandler);
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setSettleOfflineTransferRequestHandlerFn(req -> {
+        OfflineTransfer offlineTransfer = req.getOfflineTransfer();
+
+        String transactionId = offlineTransfer.getTransactionId();
+        String amount        = offlineTransfer.getAmount();
+        String currency      = offlineTransfer.getCurrency();
+        String note          = offlineTransfer.getNote();
+        String payerId       = offlineTransfer.getPayerId();
+        String payeeFspId    = offlineTransfer.getPayeeFspId();
+        String payeeId       = offlineTransfer.getPayeeId();
+        // La fuente de la respuesta es el Participante receptor (el nuestro)
+        String sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId = req.getSourceFspId();
+
+        ServerSettleOfflineTransferResponse.Builder response =
+                ServerSettleOfflineTransferResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId);
+
+        SettleOfflineTransferResult.Builder result =
+                SettleOfflineTransferResult.newBuilder()
+                        .setTransactionId(transactionId);
+
+        // Si el pago ya se procesó, devuelve el mismo resultado sin volver a debitar
+        ResultadoPagoOffline resultadoPrevio = buscarResultadoDePagoOffline(transactionId);
+        if (resultadoPrevio != null) {
+            result.setSuccess(resultadoPrevio.exitoso);
+            if (resultadoPrevio.codigoError != null) result.setErrorCode(resultadoPrevio.codigoError);
+            return response.setResult(result.build()).build();
+        }
+
+        // Localiza la cuenta del pagador por su identificador y la moneda del pago
+        Cuenta cuentaPagador = buscarCuentaPorPartyId(payerId, currency);
+        if (cuentaPagador == null) {
+            return response.setResult(result.setSuccess(false).setErrorCode("ACCOUNT_NOT_FOUND").build()).build();
+        }
+
+        // Verifica que la reserva exista, siga vigente y cubra el monto
+        ReservaOffline reserva = obtenerReservaOffline(cuentaPagador);
+        String codigoReserva = validarReserva(reserva, amount);
+        if (codigoReserva != null) {
+            return response.setResult(result.setSuccess(false).setErrorCode(codigoReserva).build()).build();
+        }
+
+        boolean transferenciaExitosa;
+
+        if (payeeFspId.equals(MI_FSP_ID)) {
+            // Beneficiario en el mismo Participante: transferencia interna
+            Cuenta cuentaBeneficiario = buscarCuentaPorPartyId(payeeId, currency);
+            if (cuentaBeneficiario == null) {
+                return response.setResult(result.setSuccess(false).setErrorCode("PAYEE_ACCOUNT_NOT_FOUND").build()).build();
+            }
+            transferenciaExitosa = transferenciaInterna(
+                    transactionId, amount, cuentaPagador, cuentaBeneficiario, note);
+        } else {
+            // Beneficiario en otro Participante: ExecuteTransfer con escenario OFFLINE_TRANSFER
+            // Ver: /guides/basic-flow/execute-transfer/
+            transferenciaExitosa = ejecutarTransferencia(
+                    transactionId, amount, currency, payerId, payeeId, payeeFspId, note, "OFFLINE_TRANSFER");
+        }
+
+        if (!transferenciaExitosa) {
+            return response.setResult(result.setSuccess(false).setErrorCode("TRANSFER_EXECUTION_FAILED").build()).build();
+        }
+
+        // Descuenta el monto de la reserva una vez completada la transferencia
+        consumirReserva(reserva, amount);
+        guardarResultadoDePagoOffline(transactionId, true);
+
+        return response.setResult(result.setSuccess(true).build()).build();
+    });
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    SettleOfflineTransferRequestHandlerDelegate settleOfflineTransferHandler =
+        async (ServerSettleOfflineTransferRequest request) =>
+    {
+        var sourceFspId      = request.SourceFspId;
+        var destinationFspId = request.DestinationFspId;
+        var offlineTransfer  = request.OfflineTransfer;
+
+        var transactionId = offlineTransfer.TransactionId;
+        var amount        = offlineTransfer.Amount;
+        var currency      = offlineTransfer.Currency;
+        var note          = offlineTransfer.Note;
+        var payerId       = offlineTransfer.PayerId;
+        var payeeFspId    = offlineTransfer.PayeeFspId;
+        var payeeId       = offlineTransfer.PayeeId;
+
+        var result = new SettleOfflineTransferResult { TransactionId = transactionId };
+
+        var response = new ServerSettleOfflineTransferResponse
+        {
+            // La fuente de la respuesta es el Participante receptor (el nuestro)
+            SourceFspId      = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId = sourceFspId,
+            Result           = result,
+        };
+
+        ServerSettleOfflineTransferResponse Rechazar(string codigo)
+        {
+            result.Success   = false;
+            result.ErrorCode = codigo;
+            return response;
+        }
+
+        // Si el pago ya se procesó, devuelve el mismo resultado sin volver a debitar
+        var resultadoPrevio = BuscarResultadoDePagoOffline(transactionId);
+        if (resultadoPrevio != null)
+        {
+            result.Success = resultadoPrevio.Exitoso;
+            if (resultadoPrevio.CodigoError != null) result.ErrorCode = resultadoPrevio.CodigoError;
+            return response;
+        }
+
+        // Localiza la cuenta del pagador por su identificador y la moneda del pago
+        var cuentaPagador = BuscarCuentaPorPartyId(payerId, currency);
+        if (cuentaPagador == null) return Rechazar("ACCOUNT_NOT_FOUND");
+
+        // Verifica que la reserva exista, siga vigente y cubra el monto
+        var reserva = ObtenerReservaOffline(cuentaPagador);
+        var codigoReserva = ValidarReserva(reserva, amount);
+        if (codigoReserva != null) return Rechazar(codigoReserva);
+
+        bool transferenciaExitosa;
+
+        if (payeeFspId == MiFspId)
+        {
+            // Beneficiario en el mismo Participante: transferencia interna
+            var cuentaBeneficiario = BuscarCuentaPorPartyId(payeeId, currency);
+            if (cuentaBeneficiario == null) return Rechazar("PAYEE_ACCOUNT_NOT_FOUND");
+
+            transferenciaExitosa = await TransferenciaInterna(
+                transactionId, amount, cuentaPagador, cuentaBeneficiario, note);
+        }
+        else
+        {
+            // Beneficiario en otro Participante: ExecuteTransfer con escenario OFFLINE_TRANSFER
+            // Ver: /guides/basic-flow/execute-transfer/
+            transferenciaExitosa = await EjecutarTransferencia(
+                transactionId, amount, currency, payerId, payeeId, payeeFspId, note, "OFFLINE_TRANSFER");
+        }
+
+        if (!transferenciaExitosa) return Rechazar("TRANSFER_EXECUTION_FAILED");
+
+        // Descuenta el monto de la reserva una vez completada la transferencia
+        ConsumirReserva(reserva, amount);
+        GuardarResultadoDePagoOffline(transactionId, exitoso: true);
+
+        result.Success = true;
+        return response;
+    };
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSettleOfflineTransferRequestHandler(settleOfflineTransferHandler);
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $client->setSettleOfflineTransferHandler(function ($req) {
+        $offlineTransfer = $req->getOfflineTransfer();
+
+        $transactionId = $offlineTransfer->getTransactionId();
+        $amount        = $offlineTransfer->getAmount();
+        $currency      = $offlineTransfer->getCurrency();
+        $note          = $offlineTransfer->getNote();
+        $payerId       = $offlineTransfer->getPayerId();
+        $payeeFspId    = $offlineTransfer->getPayeeFspId();
+        $payeeId       = $offlineTransfer->getPayeeId();
+
+        $result = (new SettleOfflineTransferResult())
+            ->setTransactionId($transactionId);
+
+        $response = (new ServerSettleOfflineTransferResponse())
+            // La fuente de la respuesta es el Participante receptor (el nuestro)
+            ->setSourceFspId($req->getDestinationFspId())
+            // El destino de la respuesta es quien originó la solicitud
+            ->setDestinationFspId($req->getSourceFspId())
+            ->setResult($result);
+
+        $rechazar = function (string $codigo) use ($result, $response) {
+            $result->setSuccess(false)->setErrorCode($codigo);
+            return $response;
+        };
+
+        // Si el pago ya se procesó, devuelve el mismo resultado sin volver a debitar
+        $resultadoPrevio = buscarResultadoDePagoOffline($transactionId);
+        if ($resultadoPrevio !== null) {
+            $result->setSuccess($resultadoPrevio->exitoso);
+            if ($resultadoPrevio->codigoError !== null) $result->setErrorCode($resultadoPrevio->codigoError);
+            return $response;
+        }
+
+        // Localiza la cuenta del pagador por su identificador y la moneda del pago
+        $cuentaPagador = buscarCuentaPorPartyId($payerId, $currency);
+        if ($cuentaPagador === null) return $rechazar('ACCOUNT_NOT_FOUND');
+
+        // Verifica que la reserva exista, siga vigente y cubra el monto
+        $reserva = obtenerReservaOffline($cuentaPagador);
+        $codigoReserva = validarReserva($reserva, $amount);
+        if ($codigoReserva !== null) return $rechazar($codigoReserva);
+
+        if ($payeeFspId === MI_FSP_ID) {
+            // Beneficiario en el mismo Participante: transferencia interna
+            $cuentaBeneficiario = buscarCuentaPorPartyId($payeeId, $currency);
+            if ($cuentaBeneficiario === null) return $rechazar('PAYEE_ACCOUNT_NOT_FOUND');
+
+            $transferenciaExitosa = transferenciaInterna(
+                $transactionId, $amount, $cuentaPagador, $cuentaBeneficiario, $note);
+        } else {
+            // Beneficiario en otro Participante: ExecuteTransfer con escenario OFFLINE_TRANSFER
+            // Ver: /guides/basic-flow/execute-transfer/
+            $transferenciaExitosa = ejecutarTransferencia(
+                $transactionId, $amount, $currency, $payerId, $payeeId, $payeeFspId, $note, 'OFFLINE_TRANSFER');
+        }
+
+        if (!$transferenciaExitosa) return $rechazar('TRANSFER_EXECUTION_FAILED');
+
+        // Descuenta el monto de la reserva una vez completada la transferencia
+        consumirReserva($reserva, $amount);
+        guardarResultadoDePagoOffline($transactionId, true);
+
+        $result->setSuccess(true);
+        return $response;
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante (`ServerSettleOfflineTransferRequest`)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que origina la solicitud. |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (el Participante del pagador). |
+| `offlineTransfer` | `OfflineTransfer` | Datos del pago offline a acreditar. Ver tabla siguiente. |
+
+### `OfflineTransfer`
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `transactionId` | `string` | Identificador único del pago offline. Úsalo como identificador de la transferencia y para garantizar que el pago se acredite una sola vez. |
+| `amount` | `string` | Monto del pago. |
+| `currency` | `string` | Moneda del pago (ej. `'MXN'`). |
+| `note` | `string` | Concepto o nota del pago. |
+| `payerFspId` | `string` | FSP del pagador (el Participante). |
+| `payerId` | `string` | Identificador del Cliente pagador (ej. número de celular). |
+| `payerName` | `string` | Nombre del pagador. |
+| `payeeFspId` | `string` | FSP del beneficiario. |
+| `payeeId` | `string` | Identificador del beneficiario (ej. número de celular). |
+| `payeeName` | `string` | Nombre del beneficiario. |
+| `createdAt` | `string` | Fecha en que se realizó el pago offline entre los dispositivos. |
+
+## Respuesta (`ServerSettleOfflineTransferResponse`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (el Participante). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `result` | `SettleOfflineTransferResult` | Sí | Resultado de la acreditación. Ver tabla siguiente. |
+| `error` | `ErrorResponse` | No | No lo uses para reportar rechazos. Ver nota abajo. |
+
+### `SettleOfflineTransferResult`
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `transactionId` | `string` | Sí | Identificador del pago offline (mismo que el recibido). |
+| `success` | `boolean` | Sí | `true` si el pago se acreditó; `false` si fue rechazado. |
+| `errorCode` | `string` | No | Código del motivo de rechazo. Incluir cuando `success` sea `false`. |
+
+<Aside type="caution">
+  Incluye siempre el campo `result`. Si la respuesta no lo incluye o incluye el campo `error`, el Switch la descarta y el pago queda sin resultado. Para reportar un rechazo, usa `result.success = false` con su `result.errorCode`.
+</Aside>
+
+## Códigos de rechazo
+
+| Código | Cuándo usarlo |
+|---|---|
+| `ACCOUNT_NOT_FOUND` | No existe una cuenta del pagador en la moneda del pago. |
+| `RESERVATION_NOT_FOUND` | La cuenta del pagador no tiene una reserva offline. |
+| `RESERVATION_ALREADY_CONSUMED` | La reserva ya se consumió por completo. |
+| `RESERVATION_ALREADY_RELEASED` | La reserva ya se liberó. |
+| `RESERVATION_FAILED` | La reserva quedó en un estado de error. |
+| `INSUFFICIENT_RESERVED_FUNDS` | El monto disponible en la reserva es menor al monto del pago. |
+| `PAYEE_ACCOUNT_NOT_FOUND` | El beneficiario está en el mismo Participante, pero no tiene una cuenta en la moneda del pago. |
+| `TRANSFER_EXECUTION_FAILED` | La transferencia hacia el beneficiario no se pudo completar. |
+
+Si la transferencia no se completó, no descuentes el monto de la reserva.

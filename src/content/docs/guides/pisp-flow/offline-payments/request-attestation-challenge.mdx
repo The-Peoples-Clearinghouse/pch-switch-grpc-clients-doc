@@ -1,0 +1,144 @@
+---
+title: Solicitar challenge de atestación
+description: Cómo solicitar al Switch un challenge para la atestación de dispositivos cuando el Participante ofrece pagos offline desde su propia app.
+sidebar:
+  order: 5
+  badge:
+    text: App propia
+    variant: note
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+`RequestAttestationChallenge` permite obtener un **challenge** para la atestación del dispositivo del Cliente. La atestación comprueba que la app que realiza operaciones de pagos offline es la app oficial, descargada de la tienda de aplicaciones y ejecutándose en un dispositivo íntegro. El Switch enruta la solicitud al servicio de pagos offline, que genera el challenge y lo devuelve.
+
+Con el challenge recibido, la app del Participante genera la atestación mediante los servicios de integridad de cada plataforma (Google Play en Android, App Store en iOS).
+
+<Aside type="note">
+  Este método solo aplica si el Participante ofrece pagos offline desde **su propia app**. Si sus Clientes usan la app PISP, la app PISP realiza este proceso y el Participante no necesita implementarlo.
+</Aside>
+
+## Enviar la solicitud
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    const request = new RequestAttestationChallengeRequest();
+    request.setSourcefspid('MIBANCO');
+
+    // Envía la solicitud al Switch
+    const grpcResponse = await grpcClient.requestAttestationChallenge(request);
+
+    // Maneja la respuesta
+    const error = grpcResponse.getError();
+    if (error) {
+      console.error('Error del Switch:', error.getCode(), error.getMessage());
+      return;       // no continuar el flujo
+    }
+
+    const challengeId = grpcResponse.getChallengeid();
+    const challenge   = grpcResponse.getChallenge();
+
+    // Entrega el challenge a la app para que genere la atestación
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    RequestAttestationChallengeRequest request = RequestAttestationChallengeRequest.newBuilder()
+        .setSourceFspId("MIBANCO")
+        .build();
+
+    // Envía la solicitud al Switch
+    RequestAttestationChallengeResponse grpcResponse = grpcClient.requestAttestationChallenge(request);
+
+    // Maneja la respuesta
+    if (grpcResponse.hasError()) {
+        System.err.println("Error del Switch: "
+            + grpcResponse.getError().getCode() + " "
+            + grpcResponse.getError().getMessage());
+        return; // no continuar el flujo
+    }
+
+    String challengeId = grpcResponse.getChallengeId();
+    String challenge   = grpcResponse.getChallenge();
+
+    // Entrega el challenge a la app para que genere la atestación
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    var request = new RequestAttestationChallengeRequest
+    {
+        SourceFspId = "MIBANCO",
+    };
+
+    // Envía la solicitud al Switch
+    var grpcResponse = await grpcClient.RequestAttestationChallenge(request);
+
+    // Maneja la respuesta
+    if (grpcResponse.Error is not null)
+    {
+        Console.Error.WriteLine($"Error del Switch: {grpcResponse.Error.Code} {grpcResponse.Error.Message}");
+        return; // no continuar el flujo
+    }
+
+    var challengeId = grpcResponse.ChallengeId;
+    var challenge   = grpcResponse.Challenge;
+
+    // Entrega el challenge a la app para que genere la atestación
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $request = (new RequestAttestationChallengeRequest())
+        ->setSourceFspId('MIBANCO');
+
+    // Envía la solicitud al Switch
+    $grpcResponse = $client->requestAttestationChallenge($request);
+
+    // Maneja la respuesta
+    if ($grpcResponse->hasError()) {
+        fwrite(STDERR, 'Error del Switch: '
+            . $grpcResponse->getError()->getCode() . ' '
+            . $grpcResponse->getError()->getMessage() . "\n");
+        return; // no continuar el flujo
+    }
+
+    $challengeId = $grpcResponse->getChallengeId();
+    $challenge   = $grpcResponse->getChallenge();
+
+    // Entrega el challenge a la app para que genere la atestación
+    ```
+  </TabItem>
+</Tabs>
+
+## Parámetros de la solicitud (`RequestAttestationChallengeRequest`)
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que origina la solicitud (el Participante). |
+
+## Respuesta exitosa (`RequestAttestationChallengeResponse`)
+
+```json
+{
+  "destinationFspId": "MIBANCO",
+  "challengeId": "8f1c2a7e-3b4d-4c9a-9e21-5d6f7a8b9c0d",
+  "challenge": "q3Jx9ZtV1mK8wP2sL5nR7yB4..."
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `destinationFspId` | `string` | FSP destino de la respuesta (el Participante). |
+| `challengeId` | `string` | Identificador del challenge. Consérvalo junto con la atestación generada, ya que la identifica ante el Switch. |
+| `challenge` | `string` | Valor que la app debe usar para generar la atestación del dispositivo. |
+| `error` | `ErrorResponse` | Presente solo si no fue posible generar el challenge. |
+
+## Manejo de errores
+
+Si el Switch no puede generar el challenge, `grpcResponse.getError()` devuelve un objeto con `code` y `message`. Si la solicitud no incluye `sourceFspId`, el Switch la ignora.
+
+<Aside type="caution">
+  Si la respuesta contiene un error, **no continúes**: sin un challenge válido la app no puede generar la atestación del dispositivo.
+</Aside>
