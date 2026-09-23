@@ -13,10 +13,12 @@ La Cámara proporciona clientes gRPC listos para usar. No es necesario implement
 
 Antes de instalar el cliente, asegúrate de contar con:
 
-- Los tres archivos de certificados:
-  - `participante.key` — clave privada del participante
-  - `participante.pem` — certificado del participante
-  - `hub-intermediate.pem` — certificado de la CA Intermedia
+- Los archivos de certificados de ambas jerarquías:
+  - `participant_authentication.key` — clave privada de autenticación
+  - `participant_authentication.pem` — certificado de autenticación del participante
+  - `hub-intermediate.pem` — certificado de la CA Intermedia de autenticación
+  - `participant_transaction_signing.key` — clave privada de firma de transacciones
+  - `hub-intermediate-transaction-signing.pem` — certificado de la CA Intermedia de firma de transacciones
 
   Consulta la sección de [Seguridad](/pch-switch-grpc-clients-doc/getting-started/security) para más detalles sobre cómo obtenerlos.
 
@@ -24,6 +26,7 @@ Antes de instalar el cliente, asegúrate de contar con:
   - **TypeScript** — disponibles en el Artifact Registry de PCH (ver instrucciones más abajo).
   - **Java** — archivo `.jar` entregado directamente por la Cámara.
   - **C#** — archivos `.nupkg` entregados directamente por la Cámara.
+  - **PHP** — paquete Composer privado entregado directamente por la Cámara.
 
 ## Instalación
 

@@ -7,12 +7,52 @@ sidebar:
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-`ExecuteTransfer` es el mensaje que inicia el movimiento de fondos. Se envía una vez que el usuario ha confirmado el monto, concepto y factor de autenticación. El Switch procesa la solicitud, la enruta al banco receptor y devuelve el resultado cuando la transferencia es definitiva.
+`ExecuteTransfer` es una llamada gRPC que permite enviar una transferencia de dinero desde un participante A a un participante B. La transferencia se realiza de manera **definitiva e irrevocable** una vez que el banco receptor la acepta.
 
 Este paso requiere los datos del beneficiario obtenidos previamente con [`LookupParty`](/pch-switch-grpc-clients-doc/guides/basic-flow/lookup-party).
 
 ![Flujo de transferencia](../../../../assets/transfer-flow.webp)
 
+## Firmar la transferencia
+
+El pagador debe firmar el contenido de cada `TransferRequest` con la llave privada de **firma de transacciones** (`participant_transaction_signing.key` distinta de la llave de autenticación; ver [Seguridad](/pch-switch-grpc-clients-doc/getting-started/security) e [Inicialización del cliente](/pch-switch-grpc-clients-doc/getting-started/initialization)). El Switch reconstruye el mismo contenido canónico con los datos que recibió y compara ambas firmas si no coinciden, rechaza la transferencia con un error de firma inválida.
+
+### Contenido canónico
+
+El canónico se arma concatenando estos campos del propio `TransferRequest` con `|`, en este orden exacto:
+
+| # | Campo |
+|---|---|
+| 1 | `homeTransactionId` |
+| 2 | `from.fspId` |
+| 3 | `from.idType` |
+| 4 | `from.idValue` |
+| 5 | `to.fspId` |
+| 6 | `to.idType` |
+| 7 | `to.idValue` |
+| 8 | `amountType` |
+| 9 | `amount.currencyCode` |
+| 10 | `amount.amount` |
+| 11 | `transactionType.scenario` |
+| 12 | `transactionType.subScenario` |
+| 13 | `transactionType.initiator` |
+| 14 | `transactionType.initiatorType` |
+| 15 | `threeppiEnabled` (como string `"true"`/`"false"`) |
+| 16 | `creationTimestamp` |
+
+`note`, `originalTransferFxInfo` y `extensions` no entran en el canónico.
+
+<Aside type="caution">
+  `creationTimestamp` es obligatorio — epoch en milisegundos, como string (no ISO-8601). El Switch rechaza la solicitud si falta, y también si queda fuera de la ventana de aceptación configurada del lado del Switch (pensada para descartar solicitudes viejas repetidas).
+</Aside>
+
+**Algoritmo:** RSA + SHA-256 sobre el string canónico en UTF-8, firma en Base64 el mismo algoritmo que la firma del challenge de `StartStream`, pero con la llave de firma de transacciones en vez de la de autenticación.
+
+<Aside type="tip">
+  Java, C# y PHP ya traen esta lógica integrada en el cliente (`signTransferRequest`) no necesitás armar el canónico a mano. TypeScript sí lo requiere explícitamente, como se muestra abajo.
+</Aside>
+
+A continuación se muestra un ejemplo de cómo construir la solicitud, firmarla y enviarla al Switch.
 ## Enviar la solicitud
 
 <Tabs syncKey="lenguaje">
@@ -50,6 +90,30 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
     transferRequest.setNote('Pago de servicios');
     transferRequest.setTransactiontype(txnType);
     transferRequest.setThreeppienabled(false);
+
+    // Firma el contenido: arma el canónico y firma con la llave de firma de transacciones.
+    // buildTransferRequestCanonical se importa de "@pch-private/interop-apis-bc-grpc-sync-public-lib".
+    // transactionSigningHelper viene de la Inicialización del cliente.
+    transferRequest.setCreationtimestamp(String(Date.now()));
+    const canonical = buildTransferRequestCanonical({
+      homeTransactionId: transferRequest.getHometransactionid(),
+      fromFspId: payer.getFspid(),
+      fromIdType: payer.getIdtype(),
+      fromIdValue: payer.getIdvalue(),
+      toFspId: payee.getFspid(),
+      toIdType: payee.getIdtype(),
+      toIdValue: payee.getIdvalue(),
+      amountType: transferRequest.getAmounttype(),
+      currencyCode: transferAmount.getCurrencycode(),
+      amount: transferAmount.getAmount(),
+      scenario: txnType.getScenario(),
+      subScenario: txnType.getSubscenario(),
+      initiator: txnType.getInitiator(),
+      initiatorType: txnType.getInitiatortype(),
+      threeppiEnabled: transferRequest.getThreeppienabled(),
+      creationTimestamp: transferRequest.getCreationtimestamp(),
+    });
+    transferRequest.setPayersignature(await transactionSigningHelper.signString(canonical));
 
     // Envía la solicitud al Switch
     const grpcResponse = await grpcClient.executeTransfer(transferRequest);
@@ -107,8 +171,12 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
         .setThreeppiEnabled(false)
         .build();
 
+    // Firma el contenido: stampa creationTimestamp y calcula payerSignature con la
+    // llave de firma de transacciones configurada al inicializar el cliente
+    TransferRequest signedRequest = grpcClient.signTransferRequest(transferRequest);
+
     // Envía la solicitud al Switch
-    TransferResponse grpcResponse = grpcClient.executeTransfer(transferRequest);
+    TransferResponse grpcResponse = grpcClient.executeTransfer(signedRequest);
 
     // Maneja la respuesta
     if (grpcResponse.hasError()) {
@@ -157,8 +225,12 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
         ThreeppiEnabled   = false,
     };
 
+    // Firma el contenido: stampa CreationTimestamp y calcula PayerSignature con la
+    // llave de firma de transacciones configurada al inicializar el cliente
+    var signedRequest = await grpcClient.SignTransferRequest(transferRequest);
+
     // Envía la solicitud al Switch
-    var grpcResponse = await grpcClient.ExecuteTransfer(transferRequest);
+    var grpcResponse = await grpcClient.ExecuteTransfer(signedRequest);
 
     // Maneja la respuesta
     if (grpcResponse.Error is not null)
@@ -198,8 +270,12 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
         ->setNote('Pago de servicios')
         ->setThreeppiEnabled(false);
 
+    // Firma el contenido: stampa creationTimestamp y calcula payerSignature con la
+    // llave de firma de transacciones configurada al inicializar el cliente
+    $signedRequest = $client->signTransferRequest($transferRequest);
+
     // Envía la solicitud al Switch
-    $grpcResponse = $client->executeTransfer($transferRequest);
+    $grpcResponse = $client->executeTransfer($signedRequest);
 
     // Maneja la respuesta
     if ($grpcResponse->hasError()) {
@@ -227,8 +303,11 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
 | `from` | `Party` | Sí | Datos del ordenante (tu banco y cuenta). |
 | `to` | `Party` | Sí | Datos del beneficiario. Usa los valores obtenidos de `LookupParty`. |
 | `transactionType` | `TransactionType` | Sí | Categorización del tipo de transacción. |
+| `payerSignature` | `string` | Sí | Firma del contenido canónico, calculada con la llave de firma de transacciones ver [Firmar la transferencia](#firmar-la-transferencia). No la setees a mano: usa el helper de firma de tu cliente. |
 | `note` | `string` | No | Concepto o descripción del pago. |
 | `threeppiEnabled` | `boolean` | Sí | Indica si la transferencia usa flujo 3PPI. |
+| `extensions` | `ExtensionField[]` | No | Lista de pares clave/valor para datos adicionales específicos del participante. |
+| `creationTimestamp` | `string` | Sí | Epoch en milisegundos, como string, al momento de firmar. Forma parte del contenido canónico ver [Firmar la transferencia](#firmar-la-transferencia). |
 
 **Amount**
 
@@ -254,6 +333,13 @@ Este paso requiere los datos del beneficiario obtenidos previamente con [`Lookup
 | `scenario` | `string` | Escenario de la transacción (ej. `'TRANSFER'`). |
 | `subScenario` | `string` | Sub-escenario (ej. `'DOMESTIC'`). |
 
+**ExtensionField**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `key` | `string` | Clave del campo de extensión. |
+| `value` | `string` | Valor del campo de extensión. |
+
 Ver referencia completa: [TransferRequest](/pch-switch-grpc-clients-doc/reference/transfer-request/)
 
 ## Respuesta exitosa
@@ -271,12 +357,60 @@ Cuando el banco receptor acepta la transferencia, el Switch devuelve un `Transfe
 |---|---|---|
 | `homeTransactionId` | `grpcResponse` | Correlaciona con el identificador enviado en la solicitud. |
 | `transferId` | `success` | Identificador único asignado por la Cámara a la transferencia. |
+| `switchResponseSignature` | `grpcResponse` | Firma del Switch sobre el resultado ver [Verificar la firma del switch](#verificar-la-firma-del-switch). |
+| `payerSignature` | `success` | Copia de la firma que el pagador envió en la solicitud. |
+| `switchRequestSignature` | `success` | Firma del Switch sobre la solicitud original del pagador (canónico de la solicitud + `payerSignature`). Confirma que el Switch procesó la solicitud sin alterarla. |
+| `payeeSignature` | `success` | Firma que el banco receptor puso sobre su aceptación de la transferencia. |
 
 <Aside type="note">
   Registra el `transferId` para conciliación. Una vez recibido, la transferencia no puede revertirse a través de esta API.
 </Aside>
 
+<Aside type="tip">
+  `payerSignature`, `switchRequestSignature` y `payeeSignature` en `success` forman la cadena completa de firmas útil para auditoría, no necesarias para el flujo básico.
+</Aside>
+
 Ver referencia completa: [TransferResponse](/pch-switch-grpc-clients-doc/reference/transfer-response/)
+
+## Verificar la firma del switch
+
+`TransferResponse` trae `switchResponseSignature` la firma del Switch sobre el resultado (`transferId`, `homeTransactionId`, `errorCode`, `errorReason`, unidos con `|`). Verificarla confirma que la respuesta no fue alterada en tránsito. Es opcional pero recomendado, sobre todo para conciliación.
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    const responseCanonical = buildTransferResponseCanonical({
+      transferId: success?.getTransferid() ?? '',
+      homeTransactionId: grpcResponse.getHometransactionid(),
+      errorCode: error?.getCode() ?? '',
+      errorReason: error?.getMessage() ?? '',
+    });
+    const validSwitchSignature = await transactionSigningHelper.validateSignatureAgainstCA(
+      responseCanonical,
+      grpcResponse.getSwitchresponsesignature()
+    );
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    boolean validSwitchSignature = grpcClient.verifyTransferResponseSignature(grpcResponse);
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    var validSwitchSignature = await grpcClient.VerifyTransferResponseSignature(grpcResponse);
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $validSwitchSignature = $client->verifyTransferResponseSignature($grpcResponse);
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  Si la respuesta ya trae un resultado exitoso, no conviertas un `false` acá en un fallo sintético del negocio: la transferencia ya se liquidó de un lado o del otro. Un `false` solo significa que el resultado no se pudo confirmar criptográficamente. Por el momento este no es un proceso de conciliación implementado por la Cámara próximamente estará disponible.
+</Aside>
 
 ## Manejo de errores
 

@@ -9,38 +9,45 @@ Este documento describe los mecanismos de seguridad que protegen la comunicació
 
 ## Infraestructura de Certificados (PKI)
 
-La identidad de cada participante se verifica mediante una cadena de certificados X.509. La Cámara actúa como Autoridad Certificadora (CA) raíz de esta infraestructura.
+La identidad de cada participante se verifica mediante certificados X.509. La Cámara mantiene **dos jerarquías de CA independientes**, cada una con su propia raíz e intermedia, porque cubren propósitos distintos y no son intercambiables:
+
+| Jerarquía | Propósito | Dónde se usa |
+|---|---|---|
+| **Autenticación** | Identifica al participante ante el canal gRPC | TLS del canal y firma del challenge en [`StartStream`](#flujo-de-autenticación-startstream) |
+| **Firma de transacciones** | Identifica al participante como firmante de contenido de negocio | Firma de `payerSignature` / `payeeSignature` en `ExecuteTransfer` y `AcceptTransferResponse` |
 
 ![Jerarquía de certificados PKI](../../../assets/pki-hierarchy.webp)
 
-### Jerarquía de la CA
+### Jerarquía de cada CA
 
-La cadena de confianza tiene tres niveles:
+Cada una de las dos jerarquías tiene tres niveles:
 
-1. **CA Raíz** — certificado raíz autofirmado por la Cámara. Ancla de confianza de toda la infraestructura.
-2. **CA Intermedia** — certificado intermedio firmado por la CA Raíz. Es la autoridad que emite los certificados de los participantes.
-3. **Certificado del Participante** — certificado de cliente firmado por la CA Intermedia. Identifica de forma única al banco participante ante el Switch.
+1. **CA Raíz** — certificado raíz autofirmado por la Cámara. Ancla de confianza de esa jerarquía.
+2. **CA Intermedia** — certificado intermedio firmado por la CA Raíz correspondiente. Es la autoridad que emite los certificados de los participantes para ese propósito.
+3. **Certificado del Participante** — certificado de cliente firmado por la CA Intermedia. Identifica de forma única al banco participante ante el Switch, para ese propósito específico.
+
+El Switch valida cada firma contra la jerarquía que le corresponde: una firma de `StartStream` se valida contra la intermedia de autenticación, y una firma de `payerSignature`/`payeeSignature` se valida contra la intermedia de transacciones. Un certificado de un propósito no es válido para el otro.
 
 ### Flujo de emisión del certificado
 
-El banco participante genera su propio par de claves asimétricas y solicita un certificado a la Cámara siguiendo estos pasos:
+El banco participante genera **dos pares de claves asimétricas** — uno por jerarquía — y solicita un certificado a la Cámara por cada uno:
 
-1. El participante genera una **clave privada** (`participante.key`) en su infraestructura. Esta clave nunca debe salir de sus sistemas.
-2. Con esa clave privada, el participante genera un **Certificate Signing Request (CSR)** y lo envía a la Cámara.
-3. La Cámara verifica el CSR y lo firma con la **clave privada de la CA Intermedia**.
-4. La Cámara devuelve al participante:
-   - `participante.pem` — el certificado del participante firmado y listo para usar.
-   - `hub-intermediate.pem` — el certificado público de la CA Intermedia del Switch.
+1. El participante genera una **clave privada de autenticación** y una **clave privada de firma de transacciones**, cada una en su infraestructura. Ninguna de las dos debe salir de sus sistemas.
+2. Con cada clave privada, el participante genera un **Certificate Signing Request (CSR)** independiente y lo envía a la Cámara.
+3. La Cámara verifica cada CSR y lo firma con la clave privada de la CA Intermedia correspondiente (autenticación o transacciones).
+4. La Cámara devuelve al participante, por cada propósito, el certificado firmado y el certificado público de la CA Intermedia que lo emitió.
 
 ### Archivos necesarios para la conexión
 
-Con el proceso anterior completo, el participante dispone de los tres archivos que el cliente gRPC requiere:
+Con el proceso anterior completo, el participante dispone de los archivos que el cliente gRPC requiere:
 
 | Archivo | Origen | Descripción |
 |---|---|---|
-| `participante.key` | Generado por el participante | Clave privada. Nunca se comparte. |
-| `participante.pem` | Emitido por la Cámara | Certificado cliente firmado por la CA Intermedia. |
-| `hub-intermediate.pem` | Provisto por la Cámara | Certificado de la CA Intermedia. Se usa como trust anchor para validar el servidor. |
+| `participant_authentication.key` | Generado por el participante | Clave privada de autenticación. Nunca se comparte. |
+| `participant_authentication.pem` | Emitido por la Cámara | Certificado cliente de autenticación, firmado por la CA Intermedia de autenticación. |
+| `hub-intermediate.pem` | Provisto por la Cámara | Certificado de la CA Intermedia de autenticación. |
+| `participant_transaction_signing.key` | Generado por el participante | Clave privada de firma de transacciones. Nunca se comparte. |
+| `hub-intermediate-transaction-signing.pem` | Provisto por la Cámara | Certificado de la CA Intermedia de firma de transferencia. |
 
 ### FSPID y certificado
 
@@ -50,15 +57,17 @@ Cada certificado de participante está vinculado a un `FspId` (identificador del
 
 ## Configuración TLS del Cliente gRPC
 
-Los clientes gRPC provistos por la Cámara ya implementan la lógica de conexión segura. El equipo del banco solo debe **suministrar los tres archivos de certificados** al inicializar el cliente.
+Los clientes gRPC provistos por la Cámara ya implementan la lógica de conexión segura. El equipo del banco debe **suministrar los archivos de autenticación** al inicializar el cliente, y también los de firma de transacciones: estos últimos no participan en el handshake TLS ni en el challenge de `StartStream`, pero el cliente los necesita cargados desde el arranque para tener todo listo cuando deba firmar `payerSignature` / `payeeSignature` en una transferencia.
 
 El cliente establece la conexión en modo seguro (HTTP/2 sobre TLS). La conexión sin TLS no está permitida.
 
 Al configurar el cliente, asegúrate de:
 
-- Proporcionar la ruta o el contenido de `participante.key` (clave privada del participante).
-- Proporcionar la ruta o el contenido de `participante.pem` (certificado cliente).
+- Proporcionar la ruta o el contenido de `participant_authentication.key` (clave privada de autenticación) — usada en el canal TLS y en el challenge de `StartStream`.
+- Proporcionar la ruta o el contenido de `participant_authentication.pem` (certificado cliente de autenticación).
 - Proporcionar la ruta o el contenido de `hub-intermediate.pem` como trust anchor para validar el servidor.
+- Proporcionar la ruta o el contenido de `participant_transaction_signing.key` (clave privada de firma de transacciones) — no se usa en el stream, pero debe estar disponible para firmar transferencias.
+- Proporcionar la ruta o el contenido de `hub-intermediate-transaction-signing.pem` como trust anchor para validar las firmas de transacciones del Switch.
 - No activar el modo insecure bajo ninguna circunstancia.
 - Que el `FspId` configurado en el cliente corresponda al `FspId` del certificado.
 
@@ -107,13 +116,11 @@ El cliente ya implementa el proceso de firma internamente. Los parámetros utili
 | Parámetro | Valor |
 |---|---|
 | Algoritmo | `SHA256withRSA` |
-| Encoding del nonce | `ISO-8859-1` |
+| Encoding del nonce | `UTF-8` |
 | Formato de salida | Base64 estándar |
-
-> **Importante:** el nonce se convierte a bytes usando **ISO-8859-1**, no UTF-8. Si se usara UTF-8, la firma no coincidiría y el Switch respondería con `Unauthenticated - Invalid or expired client certificate`.
 
 ## Entorno de Pruebas
 
-Durante la fase inicial de integración, la Cámara puede encargarse de la generación, gestión y rotación de los certificados del participante. En ese caso, la Cámara entregará directamente los tres archivos necesarios (`participante.key`, `participante.pem`, `hub-intermediate.pem`) sin que el participante deba generar un CSR.
+Durante la fase inicial de integración, la Cámara puede encargarse de la generación, gestión y rotación de los certificados del participante. En ese caso, la Cámara entregará directamente los archivos necesarios de ambas jerarquías (`participant_authentication.key`, `participant_authentication.pem`, `hub-intermediate.pem`, `participant_transaction_signing.key`, `hub-intermediate-transaction-signing.pem`) sin que el participante deba generar ningún CSR.
 
 Para entornos productivos, el flujo estándar de emisión descrito en la sección anterior aplica en su totalidad.
