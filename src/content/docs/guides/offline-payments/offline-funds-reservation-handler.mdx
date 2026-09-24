@@ -1,23 +1,22 @@
 ---
 title: Reservar fondos para uso offline
-description: Cómo registrar un handler para constituir la reserva de fondos que un Cliente solicita desde una app PISP para realizar pagos offline.
+description: Cómo registrar un handler para constituir la reserva de fondos que un Cliente solicita para realizar pagos offline.
 sidebar:
   order: 2
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-Cuando un Cliente solicita desde una app PISP reservar parte de su saldo para pagos offline, el Switch envía al Participante una solicitud `CreateOfflineFundsReservations`. El Participante debe validar la solicitud, apartar el monto de la cuenta del Cliente y responder con el identificador de la reserva.
+Cuando un Cliente solicita desde la app reservar parte de su saldo para pagos offline, el Switch envía al Participante una solicitud `CreateOfflineFundsReservations`. El Participante debe validar la solicitud, registrar la reserva sobre la cuenta del Cliente y responder con su identificador.
 
 Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el Switch solicite una reserva de fondos a nombre de un Cliente del Participante.
 
-<Aside type="note">
-  Los fondos reservados **permanecen en la cuenta del Cliente**. No los transfieras a una cuenta concentradora: solo deben dejar de estar disponibles para operaciones online hasta que se consuman con un pago offline.
-</Aside>
+![Flujo de reserva de fondos offline](../../../../assets/offline-reservation-flow.webp)
 
-<Aside type="tip">
-  La solicitud de acreditación ([`SettleOfflineTransfer`](/pch-switch-grpc-clients-doc/guides/pisp-flow/offline-payments/settle-offline-transfers-handler/)) no incluye el identificador de la reserva: solo el identificador del pagador y la moneda. Guarda la reserva asociada a la cuenta del Cliente para poder localizarla en ese momento.
-</Aside>
+{/* PENDIENTE DE VALIDAR EN EL PR:
+    La solicitud de acreditación (SettleOfflineTransfer) no incluye el identificador de la reserva,
+    solo payerId y currency, por lo que el Participante tendría que guardar la reserva ligada a la cuenta
+    para localizarla después. Mismo pendiente que el anotado en settle-offline-transfers-handler.mdx. */}
 
 ## Registrar el handler
 
@@ -42,29 +41,20 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
       // El destino de la respuesta es quien originó la solicitud
       response.setDestinationfspid(sourceFspId);
 
-      // Verifica que la cuenta exista, que la moneda coincida,
-      // que el monto sea válido y que el saldo sea suficiente
-      const motivoRechazo = validarReserva(accountId, amount, currencyCode);
+      // Registra la reserva según el proceso de tu banco
+      const resultado = await crearReservaOffline({
+        reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId,
+      });
 
-      if (motivoRechazo) {
+      if (!resultado.exitoso) {
         const error = new ErrorResponse();
-        error.setCode('OFFLINE_FUNDS_RESERVATION_ERROR');
-        error.setMessage(motivoRechazo);
+        error.setCode(resultado.codigoError);
+        error.setMessage(resultado.mensajeError);
         response.setError(error);
         return response;
       }
 
-      // Aparta el monto del saldo disponible y registra la reserva en la cuenta
-      const fspReservationId = await constituirReserva({
-        reservationRef,
-        partyId,
-        accountId,
-        amount,
-        currencyCode,
-        tokenBatchId,
-      });
-
-      response.setFspreservationid(fspReservationId);
+      response.setFspreservationid(resultado.fspReservationId);
 
       return response;
     }
@@ -92,25 +82,21 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
                         .setSourceFspId(sourceFspId)
                         .setDestinationFspId(destinationFspId);
 
-        // Verifica que la cuenta exista, que la moneda coincida,
-        // que el monto sea válido y que el saldo sea suficiente
-        String motivoRechazo = validarReserva(accountId, amount, currencyCode);
+        // Registra la reserva según el proceso de tu banco
+        ResultadoReserva resultado = crearReservaOffline(
+                reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId);
 
-        if (motivoRechazo != null) {
+        if (!resultado.exitoso) {
             return response
                     .setError(ErrorResponse.newBuilder()
-                            .setCode("OFFLINE_FUNDS_RESERVATION_ERROR")
-                            .setMessage(motivoRechazo)
+                            .setCode(resultado.codigoError)
+                            .setMessage(resultado.mensajeError)
                             .build())
                     .build();
         }
 
-        // Aparta el monto del saldo disponible y registra la reserva en la cuenta
-        String fspReservationId = constituirReserva(
-                reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId);
-
         return response
-                .setFspReservationId(fspReservationId)
+                .setFspReservationId(resultado.fspReservationId)
                 .build();
     });
     ```
@@ -137,23 +123,21 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             DestinationFspId = sourceFspId,
         };
 
-        // Verifica que la cuenta exista, que la moneda coincida,
-        // que el monto sea válido y que el saldo sea suficiente
-        var motivoRechazo = ValidarReserva(accountId, amount, currencyCode);
+        // Registra la reserva según el proceso de tu banco
+        var resultado = await CrearReservaOffline(
+            reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId);
 
-        if (motivoRechazo != null)
+        if (!resultado.Exitoso)
         {
             response.Error = new ErrorResponse
             {
-                Code    = "OFFLINE_FUNDS_RESERVATION_ERROR",
-                Message = motivoRechazo,
+                Code    = resultado.CodigoError,
+                Message = resultado.MensajeError,
             };
             return response;
         }
 
-        // Aparta el monto del saldo disponible y registra la reserva en la cuenta
-        response.FspReservationId = await ConstituirReserva(
-            reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId);
+        response.FspReservationId = resultado.FspReservationId;
 
         return response;
     };
@@ -180,27 +164,23 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
             ->setSourceFspId($sourceFspId)
             ->setDestinationFspId($destinationFspId);
 
-        // Verifica que la cuenta exista, que la moneda coincida,
-        // que el monto sea válido y que el saldo sea suficiente
-        $motivoRechazo = validarReserva($accountId, $amount, $currencyCode);
-
-        if ($motivoRechazo !== null) {
-            return $response->setError((new ErrorResponse())
-                ->setCode('OFFLINE_FUNDS_RESERVATION_ERROR')
-                ->setMessage($motivoRechazo));
-        }
-
-        // Aparta el monto del saldo disponible y registra la reserva en la cuenta
-        $fspReservationId = constituirReserva(
+        // Registra la reserva según el proceso de tu banco
+        $resultado = crearReservaOffline(
             $reservationRef, $partyId, $accountId, $amount, $currencyCode, $tokenBatchId);
 
-        return $response->setFspReservationId($fspReservationId);
+        if (!$resultado->exitoso) {
+            return $response->setError((new ErrorResponse())
+                ->setCode($resultado->codigoError)
+                ->setMessage($resultado->mensajeError));
+        }
+
+        return $response->setFspReservationId($resultado->fspReservationId);
     });
     ```
   </TabItem>
 </Tabs>
 
-## Campos del mensaje entrante (`ServerCreateOfflineFundsReservationsRequest`)
+## Campos del mensaje entrante
 
 | Campo | Tipo | Descripción |
 |---|---|---|
@@ -213,7 +193,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `currencyCode` | `string` | Moneda de la reserva (ej. `'MXN'`). Debe coincidir con la moneda de la cuenta. |
 | `tokenBatchId` | `string` | Identificador del lote de tokens que respaldará la reserva. |
 
-## Respuesta (`ServerCreateOfflineFundsReservationsResponse`)
+## Respuesta
 
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
@@ -224,4 +204,15 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 
 ## Cuando la reserva falla
 
-Si la cuenta no existe, el monto no es un número mayor a cero, la moneda no coincide con la de la cuenta o el saldo disponible es insuficiente, responde con un `ErrorResponse` con código `OFFLINE_FUNDS_RESERVATION_ERROR`, un mensaje que indique el motivo, y no constituyas la reserva.
+Si el Participante no puede registrar la reserva, responde con un `ErrorResponse` con el código y el mensaje del motivo, y omite el campo `fspReservationId`.
+
+{/* PENDIENTE DE VALIDAR EN EL PR:
+    El simulador (pch-simulator, aggregate.ts:2893-2995) valida que la cuenta exista, que el monto
+    sea un número mayor a cero, que la moneda coincida con la de la cuenta y que el saldo alcance,
+    y responde siempre con el mismo código: OFFLINE_FUNDS_RESERVATION_ERROR. El Switch no define ni
+    valida códigos de error. Falta saber si hay un catálogo oficial y qué validaciones se le exigen
+    al Participante.
+
+    Además, si el Participante responde con error, el Switch solo lo registra en un warning y descarta
+    la respuesta (offline-payments-handler.ts, handleStreamMsg_FundsReservationResponse), por lo que
+    el error no llega a quien originó la solicitud. */}

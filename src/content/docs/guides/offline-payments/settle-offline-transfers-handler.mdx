@@ -1,0 +1,254 @@
+---
+title: Acreditar un pago offline
+description: Cómo registrar un handler para acreditar un pago offline contra la reserva de fondos del Cliente pagador.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando el dispositivo del pagador o del beneficiario recupera la conexión, la app presenta el pago offline. Después de validarlo, el Switch envía al Participante del pagador una solicitud `SettleOfflineTransfer`. El Participante debe acreditar el pago contra la reserva offline del Cliente pagador y responder con el resultado.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función una vez por cada pago offline a acreditar.
+
+{/* PENDIENTE DE VALIDAR EN EL PR — nada de esto está en el proto ni en el Switch,
+    sale del simulador (pch-simulator, aggregate.ts:3000-3180) y no se documentó por eso:
+    1. Identificación de la reserva: OfflineTransfer no trae id de reserva ni de cuenta,
+       solo payerId y currency. El simulador busca la cuenta por payerId + currency y toma
+       la ÚLTIMA reserva creada, con el comentario "we do not know the id". Falta definir
+       qué pasa si un Cliente tiene más de una reserva.
+    2. Ejecución de la transferencia: el simulador hace transferencia interna si el payeeFspId
+       es el suyo, y si no llama a ExecuteTransfer con scenario "OFFLINE_TRANSFER".
+       Falta confirmar si eso es lo esperado del Participante.
+    3. Códigos de rechazo del simulador: ACCOUNT_NOT_FOUND, RESERVATION_NOT_FOUND,
+       RESERVATION_ALREADY_CONSUMED, RESERVATION_ALREADY_RELEASED, RESERVATION_FAILED,
+       INSUFFICIENT_RESERVED_FUNDS, PAYEE_ACCOUNT_NOT_FOUND, TRANSFER_EXECUTION_FAILED.
+       El Switch no los define ni los valida. Falta saber si hay un catálogo oficial. */}
+
+<Aside type="caution">
+  El mismo pago puede llegar más de una vez, ya que tanto el pagador como el beneficiario pueden presentarlo. **Solo la primera solicitud válida debe generar el cargo.** Si recibes un `transactionId` que ya procesaste, responde con el mismo resultado de la primera vez, sin volver a debitar la reserva.
+</Aside>
+
+## Registrar el handler
+
+El handler recibe los datos del pago, los entrega al proceso de acreditación del Participante y devuelve el resultado en la respuesta.
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function settleOfflineTransferHandler(
+      request: ServerSettleOfflineTransferRequest,
+    ): Promise<ServerSettleOfflineTransferResponse> {
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const offlineTransfer  = request.getOfflinetransfer();
+
+      const transactionId = offlineTransfer.getTransactionid();
+      const amount        = offlineTransfer.getAmount();
+      const currency      = offlineTransfer.getCurrency();
+      const note          = offlineTransfer.getNote();
+      const payerId       = offlineTransfer.getPayerid();
+      const payerName     = offlineTransfer.getPayername();
+      const payeeFspId    = offlineTransfer.getPayeefspid();
+      const payeeId       = offlineTransfer.getPayeeid();
+      const payeeName     = offlineTransfer.getPayeename();
+      const createdAt     = offlineTransfer.getCreatedat();
+
+      const response = new ServerSettleOfflineTransferResponse();
+      // La fuente de la respuesta es el Participante receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+
+      // Acredita el pago offline según el proceso de tu banco.
+      // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
+      const resultado = await acreditarPagoOffline({
+        transactionId, amount, currency, note,
+        payerId, payerName, payeeFspId, payeeId, payeeName, createdAt,
+      });
+
+      const result = new SettleOfflineTransferResult();
+      result.setTransactionid(transactionId);
+      result.setSuccess(resultado.exitoso);
+      if (!resultado.exitoso) result.setErrorcode(resultado.codigoError);
+      response.setResult(result);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSettleOfflineTransferRequestHandlerFn(settleOfflineTransferHandler);
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setSettleOfflineTransferRequestHandlerFn(req -> {
+        OfflineTransfer offlineTransfer = req.getOfflineTransfer();
+
+        String transactionId = offlineTransfer.getTransactionId();
+        String amount        = offlineTransfer.getAmount();
+        String currency      = offlineTransfer.getCurrency();
+        String note          = offlineTransfer.getNote();
+        String payerId       = offlineTransfer.getPayerId();
+        String payerName     = offlineTransfer.getPayerName();
+        String payeeFspId    = offlineTransfer.getPayeeFspId();
+        String payeeId       = offlineTransfer.getPayeeId();
+        String payeeName     = offlineTransfer.getPayeeName();
+        String createdAt     = offlineTransfer.getCreatedAt();
+        // La fuente de la respuesta es el Participante receptor (el nuestro)
+        String sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId = req.getSourceFspId();
+
+        // Acredita el pago offline según el proceso de tu banco.
+        // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
+        ResultadoAcreditacion resultado = acreditarPagoOffline(
+                transactionId, amount, currency, note,
+                payerId, payerName, payeeFspId, payeeId, payeeName, createdAt);
+
+        SettleOfflineTransferResult.Builder result =
+                SettleOfflineTransferResult.newBuilder()
+                        .setTransactionId(transactionId)
+                        .setSuccess(resultado.exitoso);
+
+        if (!resultado.exitoso) result.setErrorCode(resultado.codigoError);
+
+        return ServerSettleOfflineTransferResponse.newBuilder()
+                .setSourceFspId(sourceFspId)
+                .setDestinationFspId(destinationFspId)
+                .setResult(result.build())
+                .build();
+    });
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    SettleOfflineTransferRequestHandlerDelegate settleOfflineTransferHandler =
+        async (ServerSettleOfflineTransferRequest request) =>
+    {
+        var sourceFspId      = request.SourceFspId;
+        var destinationFspId = request.DestinationFspId;
+        var offlineTransfer  = request.OfflineTransfer;
+
+        var transactionId = offlineTransfer.TransactionId;
+        var amount        = offlineTransfer.Amount;
+        var currency      = offlineTransfer.Currency;
+        var note          = offlineTransfer.Note;
+        var payerId       = offlineTransfer.PayerId;
+        var payerName     = offlineTransfer.PayerName;
+        var payeeFspId    = offlineTransfer.PayeeFspId;
+        var payeeId       = offlineTransfer.PayeeId;
+        var payeeName     = offlineTransfer.PayeeName;
+        var createdAt     = offlineTransfer.CreatedAt;
+
+        // Acredita el pago offline según el proceso de tu banco.
+        // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
+        var resultado = await AcreditarPagoOffline(
+            transactionId, amount, currency, note,
+            payerId, payerName, payeeFspId, payeeId, payeeName, createdAt);
+
+        var result = new SettleOfflineTransferResult
+        {
+            TransactionId = transactionId,
+            Success       = resultado.Exitoso,
+        };
+
+        if (!resultado.Exitoso) result.ErrorCode = resultado.CodigoError;
+
+        return new ServerSettleOfflineTransferResponse
+        {
+            // La fuente de la respuesta es el Participante receptor (el nuestro)
+            SourceFspId      = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId = sourceFspId,
+            Result           = result,
+        };
+    };
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setSettleOfflineTransferRequestHandler(settleOfflineTransferHandler);
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $client->setSettleOfflineTransferHandler(function ($req) {
+        $offlineTransfer = $req->getOfflineTransfer();
+
+        $transactionId = $offlineTransfer->getTransactionId();
+        $amount        = $offlineTransfer->getAmount();
+        $currency      = $offlineTransfer->getCurrency();
+        $note          = $offlineTransfer->getNote();
+        $payerId       = $offlineTransfer->getPayerId();
+        $payerName     = $offlineTransfer->getPayerName();
+        $payeeFspId    = $offlineTransfer->getPayeeFspId();
+        $payeeId       = $offlineTransfer->getPayeeId();
+        $payeeName     = $offlineTransfer->getPayeeName();
+        $createdAt     = $offlineTransfer->getCreatedAt();
+
+        // Acredita el pago offline según el proceso de tu banco.
+        // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
+        $resultado = acreditarPagoOffline(
+            $transactionId, $amount, $currency, $note,
+            $payerId, $payerName, $payeeFspId, $payeeId, $payeeName, $createdAt);
+
+        $result = (new SettleOfflineTransferResult())
+            ->setTransactionId($transactionId)
+            ->setSuccess($resultado->exitoso);
+
+        if (!$resultado->exitoso) $result->setErrorCode($resultado->codigoError);
+
+        return (new ServerSettleOfflineTransferResponse())
+            // La fuente de la respuesta es el Participante receptor (el nuestro)
+            ->setSourceFspId($req->getDestinationFspId())
+            // El destino de la respuesta es quien originó la solicitud
+            ->setDestinationFspId($req->getSourceFspId())
+            ->setResult($result);
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que origina la solicitud. |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (el Participante del pagador). |
+| `offlineTransfer` | `OfflineTransfer` | Datos del pago offline a acreditar. Ver tabla siguiente. |
+
+### OfflineTransfer
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `transactionId` | `string` | Identificador único del pago offline. |
+| `amount` | `string` | Monto del pago. |
+| `currency` | `string` | Moneda del pago (ej. `'MXN'`). |
+| `note` | `string` | Concepto o nota del pago. |
+| `payerFspId` | `string` | FSP del pagador (el Participante). |
+| `payerId` | `string` | Identificador del Cliente pagador (ej. número de celular). |
+| `payerName` | `string` | Nombre del pagador. |
+| `payeeFspId` | `string` | FSP del beneficiario. |
+| `payeeId` | `string` | Identificador del beneficiario (ej. número de celular). |
+| `payeeName` | `string` | Nombre del beneficiario. |
+| `createdAt` | `string` | Fecha en que se realizó el pago offline entre los dispositivos. |
+
+## Respuesta
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (el Participante). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `result` | `SettleOfflineTransferResult` | Sí | Resultado de la acreditación. Ver tabla siguiente. |
+| `error` | `ErrorResponse` | No | No lo uses para reportar rechazos. Ver nota abajo. |
+
+### SettleOfflineTransferResult
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `transactionId` | `string` | Sí | Identificador del pago offline (mismo que el recibido). |
+| `success` | `boolean` | Sí | `true` si el pago se acreditó; `false` si fue rechazado. |
+| `errorCode` | `string` | No | Código del motivo de rechazo. Incluir cuando `success` sea `false`. |
+
+<Aside type="caution">
+  Incluye siempre el campo `result`. Si la respuesta no lo incluye o incluye el campo `error`, el Switch la descarta y el pago queda sin resultado. Para reportar un rechazo, usa `result.success = false` con su `result.errorCode`.
+</Aside>

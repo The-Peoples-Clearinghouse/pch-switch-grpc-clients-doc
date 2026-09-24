@@ -1,0 +1,82 @@
+---
+title: Introducción
+description: Introducción a los pagos offline del Switch de la Cámara de la Gente, para transferencias entre dispositivos sin conexión a internet.
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Los **pagos offline** permiten que un Cliente pague a otro desde una app móvil **sin conexión a internet**, usando Bluetooth entre ambos dispositivos. Para lograrlo, el Cliente reserva previamente una parte de su saldo y recibe en su dispositivo un conjunto de credenciales de pago firmadas, llamadas **tokens**. Cuando cualquiera de los dos dispositivos recupera la conexión, el pago se presenta al Switch y se convierte en una transferencia entre las cuentas del pagador y del beneficiario.
+
+## Tokens
+
+El token **no es dinero**: es una credencial firmada por el Switch que permite consumir, más adelante, una reserva de fondos previamente autorizada por el Participante. La contabilidad monetaria siempre la conserva el Participante; el Switch solo lleva el registro técnico de los tokens para impedir que se gasten o se acrediten dos veces.
+
+- Cada token tiene una denominación fija: **1 token equivale a 1 peso**. La única moneda soportada es `MXN`.
+- El Switch firma cada token de forma individual.
+- La app guarda los tokens cifrados en el almacenamiento seguro del dispositivo.
+- Cada token tiene una fecha de expiración, definida al generarlo.
+
+<Aside type="note">
+  Los tokens sirven para **un solo uso**. El beneficiario que recibe un pago offline no obtiene tokens gastables: obtiene un derecho pendiente de acreditación, y no puede usar lo recibido para una nueva transferencia offline antes de acreditarlo en línea.
+</Aside>
+
+## Comunicación entre dispositivos
+
+El pago offline ocurre sobre un canal **Bluetooth Low Energy (BLE)** entre el dispositivo del pagador y el del beneficiario:
+
+- Se usa la seguridad nativa del canal BLE, de tipo MITM.
+- Los datos que se intercambian van cifrados con algoritmo **AES-GCM**.
+- Al inicio del proceso, ambos dispositivos intercambian sus certificados públicos, que se usan para validar identidades en los pasos posteriores.
+- Cuando el pagador envía el certificado del pago, el propio BLE devuelve un acuse de recibo. Así el dispositivo del pagador sabe que el del beneficiario sí recibió el certificado, sin necesidad de un mensaje de confirmación adicional.
+
+## Seguridad
+
+### Llaves y certificados
+
+- Cada dispositivo genera un par de llaves de uso exclusivo para pagos offline. Las llaves se almacenan en el **Secure Enclave** en iOS o en el **Android Keystore**.
+- El algoritmo de firma es **ed25519**, elegido principalmente para reducir el tamaño de las firmas durante la transferencia offline.
+- Al registrar un dispositivo, el Switch firma el hash de su llave pública. Ese hash funciona como identificador del dispositivo.
+- El dispositivo y el Switch intercambian certificados públicos, para poder validar identidades sin conexión y durante la acreditación.
+
+![Flujo de registro del dispositivo para pagos offline](../../../../assets/offline-onboarding-flow.webp)
+
+### Durante la transferencia
+
+Cada pago offline produce un **certificado de pago**, firmado tanto por el dispositivo pagador como por el del beneficiario. La doble firma asegura el no repudio de la operación. Ambos dispositivos conservan una copia del certificado, ya que cualquiera de los dos puede presentarlo después para acreditar el pago.
+
+### Durante la acreditación
+
+- La comunicación en línea usa **gRPC autenticado con certificados y TLS**.
+- Antes de solicitar la acreditación al Participante, el Switch valida el certificado del pago, las firmas del pagador y del beneficiario, la firma y el estado de cada token.
+- La primera presentación válida de un pago es la única que genera el cargo. Las presentaciones posteriores devuelven el mismo resultado y no generan un segundo débito.
+
+### Requisitos del dispositivo
+
+Para operar con pagos offline, el dispositivo del Cliente debe cumplir:
+
+- **Android**: dispositivo no rooteado y con las llaves del dispositivo respaldadas por hardware, al menos en el entorno de ejecución confiable del procesador (*Trusted Execution Environment*). No basta con llaves protegidas únicamente por software.
+- **iOS**: dispositivo sin jailbreak, con iOS 15 o superior.
+- En ambos casos, la app debe haberse descargado de la tienda de aplicaciones oficial de cada sistema operativo.
+
+Estos requisitos se comprueban mediante la **atestación** del dispositivo, que valida que la app es la oficial y que se ejecuta en un dispositivo íntegro.
+
+### Con la app PISP de la Cámara
+
+El Participante solo debe **responder a las solicitudes que le envía el Switch**, registrando los handlers correspondientes en el cliente gRPC. La app PISP se encarga del registro del dispositivo, de la atestación, del pago por Bluetooth y de presentar los pagos para su acreditación.
+
+Los métodos a implementar son:
+
+- **[Reservar fondos para uso offline](/pch-switch-grpc-clients-doc/guides/offline-payments/offline-funds-reservation-handler/)**: el Cliente solicita desde la app el monto que quiere tener disponible para pagos offline, y el Participante autoriza la reserva contra la cuenta del Cliente.
+- **[Acreditar un pago offline](/pch-switch-grpc-clients-doc/guides/offline-payments/settle-offline-transfers-handler/)**: una vez validado el pago, el Participante del pagador consume la reserva y ejecuta la transferencia hacia el beneficiario.
+- **[Liberar la reserva](/pch-switch-grpc-clients-doc/guides/offline-payments/release-offline-funds-reservation-handler/)**: el Cliente solicita que los fondos reservados que no usó vuelvan a estar disponibles en su cuenta.
+
+### Con una app propia
+
+Si el Participante ofrece pagos offline desde su propia app, el flujo cambia: además de los handlers anteriores, debe **invocar los métodos gRPC** que la app PISP invoca en su lugar, y resolver dentro de su app la parte que corresponde al dispositivo:
+
+- **[Solicitar el challenge de atestación](/pch-switch-grpc-clients-doc/guides/offline-payments/request-attestation-challenge/)** al Switch.
+- Generar la **atestación** y las **aserciones** del dispositivo con los servicios de integridad de cada plataforma, y enviarlas en las operaciones que lo requieran.
+- Solicitar la generación de los **tokens** y presentar los **certificados de pagos offline** para su procesamiento.
+- Gestionar las llaves del dispositivo, el almacenamiento seguro de los tokens y el intercambio por Bluetooth.
