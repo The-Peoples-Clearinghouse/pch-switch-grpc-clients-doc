@@ -248,7 +248,3 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 | `transactionId` | `string` | Sí | Identificador del pago offline (mismo que el recibido). |
 | `success` | `boolean` | Sí | `true` si el pago se acreditó; `false` si fue rechazado. |
 | `errorCode` | `string` | No | Código del motivo de rechazo. Incluir cuando `success` sea `false`. |
-
-<Aside type="caution">
-  Incluye siempre el campo `result`. Si la respuesta no lo incluye o incluye el campo `error`, el Switch la descarta y el pago queda sin resultado. Para reportar un rechazo, usa `result.success = false` con su `result.errorCode`.
-</Aside>
