@@ -1,15 +1,15 @@
 ---
 title: Reservar fondos para uso offline
-description: Cómo registrar un handler para constituir la reserva de fondos que un Cliente solicita para realizar pagos offline.
+description: Cómo registrar un handler para constituir la reserva de fondos que un Usuario solicita para realizar pagos offline.
 sidebar:
   order: 2
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-Cuando un Cliente solicita desde la app reservar parte de su saldo para pagos offline, el Switch envía al Participante una solicitud `CreateOfflineFundsReservations`. El Participante debe validar la solicitud, registrar la reserva sobre la cuenta del Cliente y responder con su identificador.
+Cuando un Usuario solicita desde la app reservar parte de su saldo para pagos offline, el Switch envía al Participante una solicitud `CreateOfflineFundsReservations`. El Participante debe validar la solicitud, registrar la reserva sobre la cuenta del Usuario y responder con su identificador.
 
-Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el Switch solicite una reserva de fondos a nombre de un Cliente del Participante.
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el Switch solicite una reserva de fondos a nombre de un Usuario del Participante.
 
 ![Flujo de reserva de fondos offline](../../../../assets/offline-reservation-flow.webp)
 
@@ -187,8 +187,8 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 | `sourceFspId` | `string` | FSP que origina la solicitud. |
 | `destinationFspId` | `string` | FSP al que va dirigida la solicitud (el Participante). |
 | `reservationRef` | `string` | Referencia única de la solicitud de reserva. |
-| `partyId` | `string` | Identificador del Cliente (ej. número de celular). |
-| `accountId` | `string` | Identificador de la cuenta del Cliente sobre la que se constituye la reserva. |
+| `partyId` | `string` | Identificador del Usuario (ej. número de celular). |
+| `accountId` | `string` | Identificador de la cuenta del Usuario sobre la que se constituye la reserva. |
 | `amount` | `string` | Monto a reservar. |
 | `currencyCode` | `string` | Moneda de la reserva (ej. `'MXN'`). Debe coincidir con la moneda de la cuenta. |
 | `tokenBatchId` | `string` | Identificador del lote de tokens que respaldará la reserva. |

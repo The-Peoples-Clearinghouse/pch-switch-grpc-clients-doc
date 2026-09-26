@@ -1,0 +1,179 @@
+---
+title: Presentar certificados de pagos offline
+description: Cómo presentar al Switch los certificados de pagos offline firmados, para que se validen y se acrediten.
+sidebar:
+  order: 5
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+`ProcessOfflineTransferCertificates` presenta al Switch los certificados de los pagos offline que ya ocurrieron entre dispositivos, para que se validen y se acrediten. Se envían todos los certificados pendientes de un mismo dispositivo en una sola llamada, y la respuesta trae un resultado por cada uno.
+
+<Aside type="note">
+  Tanto el dispositivo del pagador como el del beneficiario conservan una copia del certificado y cualquiera de los dos puede presentarlo. Un certificado ya acreditado no genera un segundo cargo.
+</Aside>
+
+## Enviar la solicitud
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    const attestationInfo = new AttestationInfo();
+    attestationInfo.setChallengeid(challengeId);
+    attestationInfo.setPackagename('mx.mibanco.app');
+    attestationInfo.setToken(attestationToken);
+
+    const request = new ProcessOfflineTransferCertificatesRequest();
+    request.setSourcefspid('MIBANCO');
+    request.setRequesterpublickeyhash(devicePublicKeyHash);
+    request.setAttestationinfo(attestationInfo);
+    // Certificados construidos y firmados por la app durante los pagos offline
+    request.setCertificatesList(certificados);
+
+    // Envía la solicitud al Switch
+    const grpcResponse = await grpcClient.processOfflineTransferCertificates(request);
+
+    // Maneja el resultado de cada certificado por separado
+    for (const result of grpcResponse.getResultsList()) {
+      const transactionId = result.getTransactionid();
+
+      if (result.getSuccess()) {
+        marcarPagoAcreditado(transactionId);
+        continue;
+      }
+
+      const error = result.getError();
+      console.error(`Pago ${transactionId} rechazado:`, error?.getCode(), error?.getMessage());
+    }
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    AttestationInfo attestationInfo = AttestationInfo.newBuilder()
+        .setChallengeId(challengeId)
+        .setPackageName("mx.mibanco.app")
+        .setToken(attestationToken)
+        .build();
+
+    ProcessOfflineTransferCertificatesRequest request = ProcessOfflineTransferCertificatesRequest.newBuilder()
+        .setSourceFspId("MIBANCO")
+        .setRequesterPublicKeyHash(devicePublicKeyHash)
+        .setAttestationInfo(attestationInfo)
+        // Certificados construidos y firmados por la app durante los pagos offline
+        .addAllCertificates(certificados)
+        .build();
+
+    // Envía la solicitud al Switch
+    ProcessOfflineTransferCertificatesResponse grpcResponse =
+        grpcClient.processOfflineTransferCertificates(request);
+
+    // Maneja el resultado de cada certificado por separado
+    for (ProcessOfflineTransferCertificateResult result : grpcResponse.getResultsList()) {
+        if (result.getSuccess()) {
+            marcarPagoAcreditado(result.getTransactionId());
+        } else {
+            System.err.println("Pago " + result.getTransactionId() + " rechazado: "
+                + result.getError().getCode() + " " + result.getError().getMessage());
+        }
+    }
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    var request = new ProcessOfflineTransferCertificatesRequest
+    {
+        SourceFspId            = "MIBANCO",
+        RequesterPublicKeyHash = devicePublicKeyHash,
+        AttestationInfo        = new AttestationInfo
+        {
+            ChallengeId = challengeId,
+            PackageName = "mx.mibanco.app",
+            Token       = attestationToken,
+        },
+    };
+
+    // Certificados construidos y firmados por la app durante los pagos offline
+    request.Certificates.AddRange(certificados);
+
+    // Envía la solicitud al Switch
+    var grpcResponse = await grpcClient.ProcessOfflineTransferCertificates(request);
+
+    // Maneja el resultado de cada certificado por separado
+    foreach (var result in grpcResponse.Results)
+    {
+        if (result.Success)
+        {
+            MarcarPagoAcreditado(result.TransactionId);
+            continue;
+        }
+
+        Console.Error.WriteLine($"Pago {result.TransactionId} rechazado: {result.Error?.Code} {result.Error?.Message}");
+    }
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $attestationInfo = (new AttestationInfo())
+        ->setChallengeId($challengeId)
+        ->setPackageName('mx.mibanco.app')
+        ->setToken($attestationToken);
+
+    $request = (new ProcessOfflineTransferCertificatesRequest())
+        ->setSourceFspId('MIBANCO')
+        ->setRequesterPublicKeyHash($devicePublicKeyHash)
+        ->setAttestationInfo($attestationInfo)
+        // Certificados construidos y firmados por la app durante los pagos offline
+        ->setCertificates($certificados);
+
+    // Envía la solicitud al Switch
+    $grpcResponse = $client->processOfflineTransferCertificates($request);
+
+    // Maneja el resultado de cada certificado por separado
+    foreach ($grpcResponse->getResults() as $result) {
+        if ($result->getSuccess()) {
+            marcarPagoAcreditado($result->getTransactionId());
+            continue;
+        }
+
+        fwrite(STDERR, 'Pago ' . $result->getTransactionId() . ' rechazado: '
+            . $result->getError()->getCode() . ' ' . $result->getError()->getMessage() . "\n");
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Parámetros de la solicitud
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que origina la solicitud (el Participante). |
+| `requesterPublicKeyHash` | `string` | Sí | Hash de la llave pública del dispositivo que presenta los certificados. |
+| `attestationInfo` | `AttestationInfo` | Sí | Resultado de la atestación del dispositivo: `challengeId`, `packageName` y `token`. |
+| `certificates` | `OfflinePaymentCertificate[]` | Sí | Certificados de los pagos offline a acreditar. Ver tabla siguiente. |
+
+### OfflinePaymentCertificate
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `paymentProposal` | `PaymentProposal` | Propuesta de pago: `transactionId`, `amount`, `currency`, `note`, datos del pagador y del beneficiario, `createdAt`, `expiresAt` y los `tokens` utilizados. |
+| `payeeAcceptance` | `PayeeAcceptance` | Aceptación del beneficiario: `acceptedAt`, `paymentProposalSignedByPayee` y `publicKeyHash`. |
+| `payerAuthorization` | `PayerAuthorization` | Autorización del pagador: `authorizedAt`, `payeeAcceptanceSignedByPayer` y `publicKeyHash`. |
+| `rejectionReasonCode` | `string` | Opcional. |
+
+## Respuesta
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `results` | `ProcessOfflineTransferCertificateResult[]` | Un resultado por cada certificado enviado. |
+
+### ProcessOfflineTransferCertificateResult
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `transactionId` | `string` | Identificador del pago offline al que corresponde el resultado. |
+| `success` | `boolean` | `true` si el pago se acreditó. |
+| `error` | `ErrorResponse` | Motivo del rechazo, cuando `success` es `false`. |
+
+<Aside type="caution">
+  Cada certificado se resuelve por separado: que uno sea rechazado no afecta a los demás. Recorre siempre la lista completa de resultados y no des por acreditado el lote entero.
+</Aside>

@@ -7,11 +7,11 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Los **pagos offline** permiten que un Cliente pague a otro desde una app móvil **sin conexión a internet**, usando Bluetooth entre ambos dispositivos. Para lograrlo, el Cliente reserva previamente una parte de su saldo y recibe en su dispositivo un conjunto de credenciales de pago firmadas, llamadas **tokens**. Cuando cualquiera de los dos dispositivos recupera la conexión, el pago se presenta al Switch y se convierte en una transferencia entre las cuentas del pagador y del beneficiario.
+Los **pagos offline** permiten que un Usuario pague a otro desde una app móvil **sin conexión a internet**, usando Bluetooth entre ambos dispositivos. Para lograrlo, el Usuario reserva previamente una parte de su saldo y recibe en su dispositivo un conjunto de **tokens**. Cuando cualquiera de los dos dispositivos recupera la conexión, el pago se presenta al Switch y se convierte en una transferencia entre las cuentas del pagador y del beneficiario.
 
 ## Tokens
 
-El token **no es dinero**: es una credencial firmada por el Switch que permite consumir, más adelante, una reserva de fondos previamente autorizada por el Participante. La contabilidad monetaria siempre la conserva el Participante; el Switch solo lleva el registro técnico de los tokens para impedir que se gasten o se acrediten dos veces.
+El token **no es dinero**: está firmado por el Switch y solo sirve para consumir, más adelante, una reserva de fondos que el Participante ya autorizó. La contabilidad monetaria siempre la conserva el Participante; el Switch solo lleva el registro técnico de los tokens para impedir que se gasten o se acrediten dos veces.
 
 - Cada token tiene una denominación fija: **1 token equivale a 1 peso**. La única moneda soportada es `MXN`.
 - El Switch firma cada token de forma individual.
@@ -54,7 +54,7 @@ Cada pago offline produce un **certificado de pago**, firmado tanto por el dispo
 
 ### Requisitos del dispositivo
 
-Para operar con pagos offline, el dispositivo del Cliente debe cumplir:
+Para operar con pagos offline, el dispositivo del Usuario debe cumplir:
 
 - **Android**: dispositivo no rooteado y con las llaves del dispositivo respaldadas por hardware, al menos en el entorno de ejecución confiable del procesador (*Trusted Execution Environment*). No basta con llaves protegidas únicamente por software.
 - **iOS**: dispositivo sin jailbreak, con iOS 15 o superior.
@@ -62,21 +62,16 @@ Para operar con pagos offline, el dispositivo del Cliente debe cumplir:
 
 Estos requisitos se comprueban mediante la **atestación** del dispositivo, que valida que la app es la oficial y que se ejecuta en un dispositivo íntegro.
 
-### Con la app PISP de la Cámara
+## Casos de uso
 
-El Participante solo debe **responder a las solicitudes que le envía el Switch**, registrando los handlers correspondientes en el cliente gRPC. La app PISP se encarga del registro del dispositivo, de la atestación, del pago por Bluetooth y de presentar los pagos para su acreditación.
+El Participante **responde a las solicitudes que le envía el Switch**, registrando los handlers correspondientes en el cliente gRPC:
 
-Los métodos a implementar son:
+- **[Reservar fondos para uso offline](/pch-switch-grpc-clients-doc/guides/offline-payments/offline-funds-reservation-handler/)**: el Usuario indica desde la app el monto que quiere tener disponible para pagos offline, y el Participante autoriza la reserva contra su cuenta.
+- **[Acreditar un pago offline](/pch-switch-grpc-clients-doc/guides/offline-payments/settle-offline-transfers-handler/)**: una vez validado el pago, el Participante del pagador lo acredita contra la reserva y ejecuta la transferencia hacia el beneficiario.
+- **[Liberar la reserva](/pch-switch-grpc-clients-doc/guides/offline-payments/release-offline-funds-reservation-handler/)**: el Usuario pide que los fondos reservados que no usó vuelvan a estar disponibles en su cuenta.
 
-- **[Reservar fondos para uso offline](/pch-switch-grpc-clients-doc/guides/offline-payments/offline-funds-reservation-handler/)**: el Cliente solicita desde la app el monto que quiere tener disponible para pagos offline, y el Participante autoriza la reserva contra la cuenta del Cliente.
-- **[Acreditar un pago offline](/pch-switch-grpc-clients-doc/guides/offline-payments/settle-offline-transfers-handler/)**: una vez validado el pago, el Participante del pagador consume la reserva y ejecuta la transferencia hacia el beneficiario.
-- **[Liberar la reserva](/pch-switch-grpc-clients-doc/guides/offline-payments/release-offline-funds-reservation-handler/)**: el Cliente solicita que los fondos reservados que no usó vuelvan a estar disponibles en su cuenta.
+<Aside type="note">
+  Estos son los **únicos métodos** que el Participante debe implementar cuando sus Usuarios operan con la app PISP de la Cámara, que se encarga del registro del dispositivo, de la atestación, del pago por Bluetooth y de presentar los pagos para su acreditación.
 
-### Con una app propia
-
-Si el Participante ofrece pagos offline desde su propia app, el flujo cambia: además de los handlers anteriores, debe **invocar los métodos gRPC** que la app PISP invoca en su lugar, y resolver dentro de su app la parte que corresponde al dispositivo:
-
-- **[Solicitar el challenge de atestación](/pch-switch-grpc-clients-doc/guides/offline-payments/request-attestation-challenge/)** al Switch.
-- Generar la **atestación** y las **aserciones** del dispositivo con los servicios de integridad de cada plataforma, y enviarlas en las operaciones que lo requieran.
-- Solicitar la generación de los **tokens** y presentar los **certificados de pagos offline** para su procesamiento.
-- Gestionar las llaves del dispositivo, el almacenamiento seguro de los tokens y el intercambio por Bluetooth.
+  Si el Participante quiere ofrecer pagos offline desde la app de su propio banco, además debe invocar los métodos que la app PISP invoca en su lugar y resolver en su app la parte del dispositivo. Todo eso se documenta en [Integración con app propia](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/app-specifications/).
+</Aside>

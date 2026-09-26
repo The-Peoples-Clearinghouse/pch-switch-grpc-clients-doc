@@ -2,22 +2,19 @@
 title: Solicitar challenge de atestación
 description: Cómo solicitar al Switch un challenge para la atestación de dispositivos cuando el Participante ofrece pagos offline desde su propia app.
 sidebar:
-  order: 5
-  badge:
-    text: App propia
-    variant: note
+  order: 2
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-`RequestAttestationChallenge` permite obtener un **challenge** para la atestación del dispositivo del Cliente. La atestación comprueba que la app que realiza operaciones de pagos offline es la app oficial, descargada de la tienda de aplicaciones y ejecutándose en un dispositivo íntegro. El Switch enruta la solicitud al servicio de pagos offline, que genera el challenge y lo devuelve.
+`RequestAttestationChallenge` permite obtener un **challenge** para la atestación del dispositivo del Usuario. La atestación comprueba que la app que realiza operaciones de pagos offline es la app oficial, descargada de la tienda de aplicaciones y ejecutándose en un dispositivo íntegro. El Switch enruta la solicitud al servicio de pagos offline, que genera el challenge y lo devuelve.
 
 Con el challenge recibido, la app del Participante genera la atestación mediante los servicios de integridad de cada plataforma (Google Play en Android, App Store en iOS).
 
-![Flujo del challenge de atestación](../../../../assets/offline-attestation-challenge-flow.webp)
+![Flujo del challenge de atestación](../../../../../assets/offline-attestation-challenge-flow.webp)
 
 <Aside type="note">
-  Este método solo aplica si el Participante ofrece pagos offline desde **su propia app**. Si sus Clientes usan la app PISP, la app PISP realiza este proceso y el Participante no necesita implementarlo.
+  Este método solo aplica si el Participante ofrece pagos offline desde **su propia app**. Si sus Usuarios usan la app PISP, la app PISP realiza este proceso y el Participante no necesita implementarlo.
 </Aside>
 
 ## Enviar la solicitud

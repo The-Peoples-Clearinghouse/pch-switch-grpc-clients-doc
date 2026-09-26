@@ -1,13 +1,13 @@
 ---
 title: Acreditar un pago offline
-description: Cómo registrar un handler para acreditar un pago offline contra la reserva de fondos del Cliente pagador.
+description: Cómo registrar un handler para acreditar un pago offline contra la reserva de fondos del Usuario pagador.
 sidebar:
   order: 3
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-Cuando el dispositivo del pagador o del beneficiario recupera la conexión, la app presenta el pago offline. Después de validarlo, el Switch envía al Participante del pagador una solicitud `SettleOfflineTransfer`. El Participante debe acreditar el pago contra la reserva offline del Cliente pagador y responder con el resultado.
+Cuando el dispositivo del pagador o del beneficiario recupera la conexión, la app presenta el pago offline. Después de validarlo, el Switch envía al Participante del pagador una solicitud `SettleOfflineTransfer`. El Participante debe acreditar el pago contra la reserva offline del Usuario pagador y responder con el resultado.
 
 Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función una vez por cada pago offline a acreditar.
 
@@ -16,7 +16,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
     1. Identificación de la reserva: OfflineTransfer no trae id de reserva ni de cuenta,
        solo payerId y currency. El simulador busca la cuenta por payerId + currency y toma
        la ÚLTIMA reserva creada, con el comentario "we do not know the id". Falta definir
-       qué pasa si un Cliente tiene más de una reserva.
+       qué pasa si un Usuario tiene más de una reserva.
     2. Ejecución de la transferencia: el simulador hace transferencia interna si el payeeFspId
        es el suyo, y si no llama a ExecuteTransfer con scenario "OFFLINE_TRANSFER".
        Falta confirmar si eso es lo esperado del Participante.
@@ -225,7 +225,7 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 | `currency` | `string` | Moneda del pago (ej. `'MXN'`). |
 | `note` | `string` | Concepto o nota del pago. |
 | `payerFspId` | `string` | FSP del pagador (el Participante). |
-| `payerId` | `string` | Identificador del Cliente pagador (ej. número de celular). |
+| `payerId` | `string` | Identificador del Usuario pagador (ej. número de celular). |
 | `payerName` | `string` | Nombre del pagador. |
 | `payeeFspId` | `string` | FSP del beneficiario. |
 | `payeeId` | `string` | Identificador del beneficiario (ej. número de celular). |
