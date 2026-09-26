@@ -11,7 +11,7 @@ Los **pagos offline** permiten que un Usuario pague a otro desde una app móvil 
 
 ## Tokens
 
-Un token es un respaldo, de una reserva de fondos que el Participante ya autorizó.
+Un token es un respaldo de una reserva de fondos que el Participante ya autorizó.
 
 El token **no es dinero** y por sí solo no se puede cobrar. Sirve para que el pagador le entregue al beneficiario una prueba verificable del pago mientras ninguno de los dos tiene conexión. El dinero se mueve después, cuando el Participante recibe ese pago y lo liquida.
 
@@ -62,7 +62,7 @@ El pago offline ocurre sobre un canal **Bluetooth Low Energy (BLE)** entre el di
 
 Cada pago offline produce un **certificado de pago**, firmado tanto por el dispositivo pagador como por el del beneficiario. La doble firma asegura el no repudio de la operación. Ambos dispositivos conservan una copia del certificado, ya que cualquiera de los dos puede presentarlo después para liquidar el pago.
 
-### Durante la liquidación
+### Durante la liquidación del pago
 
 - La comunicación en línea usa **gRPC autenticado con certificados y TLS**.
 - Antes de solicitar la liquidación al Participante, el Switch valida el certificado del pago, las firmas del pagador y del beneficiario, la firma y el estado de cada token.
@@ -83,7 +83,7 @@ Para pasar la atestación, el dispositivo del Usuario debe cumplir:
 El Participante **responde a las solicitudes que le envía el Switch**, registrando los handlers correspondientes en el cliente gRPC:
 
 - **[Reservar fondos para uso offline](/pch-switch-grpc-clients-doc/guides/offline-payments/offline-funds-reservation-handler/)**: el Usuario indica desde la app el monto que quiere tener disponible para pagos offline, y el Participante autoriza la reserva contra su cuenta.
-- **[Liquidar un pago offline](/pch-switch-grpc-clients-doc/guides/offline-payments/settle-offline-transfers-handler/)**: una vez validado el pago, el Participante del pagador lo acredita contra la reserva y ejecuta la transferencia hacia el beneficiario.
+- **[Liquidar un pago offline](/pch-switch-grpc-clients-doc/guides/offline-payments/settle-offline-transfers-handler/)**: una vez validado el pago, el Participante del pagador lo liquida contra la reserva y ejecuta la transferencia hacia el beneficiario.
 - **[Liberar la reserva](/pch-switch-grpc-clients-doc/guides/offline-payments/release-offline-funds-reservation-handler/)**: el Usuario pide que los fondos reservados que no usó vuelvan a estar disponibles en su cuenta.
 
 <Aside type="note">
