@@ -1,0 +1,218 @@
+---
+title: Reservar fondos para uso offline
+description: Cómo registrar un handler para constituir la reserva de fondos que un Usuario solicita para realizar pagos offline.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Cuando un Usuario solicita desde la app reservar parte de su saldo para pagos offline, el Switch envía al Participante una solicitud `CreateOfflineFundsReservations`. El Participante debe validar la solicitud, registrar la reserva sobre la cuenta del Usuario y responder con su identificador.
+
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función cada vez que el Switch solicite una reserva de fondos a nombre de un Usuario del Participante.
+
+![Flujo de reserva de fondos offline](../../../../assets/offline-reservation-flow.webp)
+
+{/* PENDIENTE DE VALIDAR EN EL PR:
+    La solicitud de liquidación (SettleOfflineTransfer) no incluye el identificador de la reserva,
+    solo payerId y currency, por lo que el Participante tendría que guardar la reserva ligada a la cuenta
+    para localizarla después. Mismo pendiente que el anotado en settle-offline-transfers-handler.mdx. */}
+
+## Registrar el handler
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    async function createOfflineFundsReservationsHandler(
+      request: ServerCreateOfflineFundsReservationsRequest,
+    ): Promise<ServerCreateOfflineFundsReservationsResponse> {
+      const sourceFspId      = request.getSourcefspid();
+      const destinationFspId = request.getDestinationfspid();
+      const reservationRef   = request.getReservationref();
+      const partyId          = request.getPartyid();
+      const accountId        = request.getAccountid();
+      const amount           = request.getAmount();
+      const currencyCode     = request.getCurrencycode();
+      const tokenBatchId     = request.getTokenbatchid();
+
+      const response = new ServerCreateOfflineFundsReservationsResponse();
+      // La fuente de la respuesta es el Participante receptor (el nuestro)
+      response.setSourcefspid(destinationFspId);
+      // El destino de la respuesta es quien originó la solicitud
+      response.setDestinationfspid(sourceFspId);
+
+      // Registra la reserva según el proceso de tu banco
+      const resultado = await crearReservaOffline({
+        reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId,
+      });
+
+      if (!resultado.exitoso) {
+        const error = new ErrorResponse();
+        error.setCode(resultado.codigoError);
+        error.setMessage(resultado.mensajeError);
+        response.setError(error);
+        return response;
+      }
+
+      response.setFspreservationid(resultado.fspReservationId);
+
+      return response;
+    }
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setCreateOfflineFundsReservationsRequestHandlerFn(createOfflineFundsReservationsHandler);
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    grpcClient.setCreateOfflineFundsReservationsRequestHandlerFn(req -> {
+        String reservationRef   = req.getReservationRef();
+        String partyId          = req.getPartyId();
+        String accountId        = req.getAccountId();
+        String amount           = req.getAmount();
+        String currencyCode     = req.getCurrencyCode();
+        String tokenBatchId     = req.getTokenBatchId();
+        // La fuente de la respuesta es el Participante receptor (el nuestro)
+        String sourceFspId      = req.getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        String destinationFspId = req.getSourceFspId();
+
+        ServerCreateOfflineFundsReservationsResponse.Builder response =
+                ServerCreateOfflineFundsReservationsResponse.newBuilder()
+                        .setSourceFspId(sourceFspId)
+                        .setDestinationFspId(destinationFspId);
+
+        // Registra la reserva según el proceso de tu banco
+        ResultadoReserva resultado = crearReservaOffline(
+                reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId);
+
+        if (!resultado.exitoso) {
+            return response
+                    .setError(ErrorResponse.newBuilder()
+                            .setCode(resultado.codigoError)
+                            .setMessage(resultado.mensajeError)
+                            .build())
+                    .build();
+        }
+
+        return response
+                .setFspReservationId(resultado.fspReservationId)
+                .build();
+    });
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    CreateOfflineFundsReservationsRequestHandlerDelegate createOfflineFundsReservationsHandler =
+        async (ServerCreateOfflineFundsReservationsRequest request) =>
+    {
+        var sourceFspId      = request.SourceFspId;
+        var destinationFspId = request.DestinationFspId;
+        var reservationRef   = request.ReservationRef;
+        var partyId          = request.PartyId;
+        var accountId        = request.AccountId;
+        var amount           = request.Amount;
+        var currencyCode     = request.CurrencyCode;
+        var tokenBatchId     = request.TokenBatchId;
+
+        var response = new ServerCreateOfflineFundsReservationsResponse
+        {
+            // La fuente de la respuesta es el Participante receptor (el nuestro)
+            SourceFspId      = destinationFspId,
+            // El destino de la respuesta es quien originó la solicitud
+            DestinationFspId = sourceFspId,
+        };
+
+        // Registra la reserva según el proceso de tu banco
+        var resultado = await CrearReservaOffline(
+            reservationRef, partyId, accountId, amount, currencyCode, tokenBatchId);
+
+        if (!resultado.Exitoso)
+        {
+            response.Error = new ErrorResponse
+            {
+                Code    = resultado.CodigoError,
+                Message = resultado.MensajeError,
+            };
+            return response;
+        }
+
+        response.FspReservationId = resultado.FspReservationId;
+
+        return response;
+    };
+
+    // Registrar el handler en el cliente gRPC
+    grpcClient.setCreateOfflineFundsReservationsRequestHandler(createOfflineFundsReservationsHandler);
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $client->setCreateOfflineFundsReservationsHandler(function ($req) {
+        $reservationRef   = $req->getReservationRef();
+        $partyId          = $req->getPartyId();
+        $accountId        = $req->getAccountId();
+        $amount           = $req->getAmount();
+        $currencyCode     = $req->getCurrencyCode();
+        $tokenBatchId     = $req->getTokenBatchId();
+        // La fuente de la respuesta es el Participante receptor (el nuestro)
+        $sourceFspId      = $req->getDestinationFspId();
+        // El destino de la respuesta es quien originó la solicitud
+        $destinationFspId = $req->getSourceFspId();
+
+        $response = (new ServerCreateOfflineFundsReservationsResponse())
+            ->setSourceFspId($sourceFspId)
+            ->setDestinationFspId($destinationFspId);
+
+        // Registra la reserva según el proceso de tu banco
+        $resultado = crearReservaOffline(
+            $reservationRef, $partyId, $accountId, $amount, $currencyCode, $tokenBatchId);
+
+        if (!$resultado->exitoso) {
+            return $response->setError((new ErrorResponse())
+                ->setCode($resultado->codigoError)
+                ->setMessage($resultado->mensajeError));
+        }
+
+        return $response->setFspReservationId($resultado->fspReservationId);
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## Campos del mensaje entrante
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `sourceFspId` | `string` | FSP que origina la solicitud. |
+| `destinationFspId` | `string` | FSP al que va dirigida la solicitud (el Participante). |
+| `reservationRef` | `string` | Referencia única de la solicitud de reserva. |
+| `partyId` | `string` | Identificador del Usuario (ej. número de celular). |
+| `accountId` | `string` | Identificador de la cuenta del Usuario sobre la que se constituye la reserva. |
+| `amount` | `string` | Monto a reservar. |
+| `currencyCode` | `string` | Moneda de la reserva (ej. `'MXN'`). Debe coincidir con la moneda de la cuenta. |
+| `tokenBatchId` | `string` | Identificador del lote de tokens que respaldará la reserva. |
+
+## Respuesta
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que responde (el Participante). Usa el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `fspReservationId` | `string` | Sí, si la reserva se constituyó | Identificador de la reserva generado por el Participante. |
+| `error` | `ErrorResponse` | No | Incluir si no fue posible constituir la reserva. |
+
+## Cuando la reserva falla
+
+Si el Participante no puede registrar la reserva, responde con un `ErrorResponse` con el código y el mensaje del motivo, y omite el campo `fspReservationId`.
+
+{/* PENDIENTE DE VALIDAR EN EL PR:
+    El simulador (pch-simulator, aggregate.ts:2893-2995) valida que la cuenta exista, que el monto
+    sea un número mayor a cero, que la moneda coincida con la de la cuenta y que el saldo alcance,
+    y responde siempre con el mismo código: OFFLINE_FUNDS_RESERVATION_ERROR. El Switch no define ni
+    valida códigos de error. Falta saber si hay un catálogo oficial y qué validaciones se le exigen
+    al Participante.
+
+    Además, si el Participante responde con error, el Switch solo lo registra en un warning y descarta
+    la respuesta (offline-payments-handler.ts, handleStreamMsg_FundsReservationResponse), por lo que
+    el error no llega a quien originó la solicitud. */}

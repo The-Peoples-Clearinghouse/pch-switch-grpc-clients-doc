@@ -1,0 +1,192 @@
+---
+title: Registrar un dispositivo
+description: Cómo registrar el dispositivo de un Usuario para pagos offline, enviando su llave pública y el resultado de la atestación.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+`OnboardDeviceForOfflinePayments` registra el dispositivo de un Usuario para que pueda operar pagos offline. El Participante envía la llave pública que generó el dispositivo junto con el resultado de la atestación, y recibe de vuelta el hash de esa llave firmado, más la llave pública con la que se firman los tokens.
+
+![Flujo de registro del dispositivo para pagos offline](../../../../../assets/offline-onboarding-flow.webp)
+
+<Aside type="note">
+  Antes de esta llamada, la app debe haber generado su par de llaves y haber obtenido una atestación válida a partir de un [challenge](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/request-attestation-challenge/).
+</Aside>
+
+## Enviar la solicitud
+
+<Tabs syncKey="lenguaje">
+  <TabItem label="TypeScript">
+    ```typescript
+    const attestation = new OnboardingAttestation();
+    attestation.setChallengeid(challengeId);
+    attestation.setPackagename('mx.mibanco.app');
+    attestation.setPlatform('ANDROID');
+    attestation.setKeyid(keyId);
+    attestation.setToken(attestationToken);
+
+    const request = new OnboardDeviceForOfflinePaymentsRequest();
+    request.setSourcefspid('MIBANCO');
+    request.setPublickey(devicePublicKey);
+    request.setPartyid('10011110002');
+    request.setFspid('MIBANCO');
+    request.setAttestation(attestation);
+
+    // Envía la solicitud al Switch
+    const grpcResponse = await grpcClient.onboardDeviceForOfflinePayments(request);
+
+    // Maneja la respuesta
+    const error = grpcResponse.getError();
+    if (error) {
+      console.error('Error del Switch:', error.getCode(), error.getMessage());
+      return;       // no continuar el flujo
+    }
+
+    const devicePublicKeyHash               = grpcResponse.getDevicepublickeyhash();
+    const minterPublicKeyPem                = grpcResponse.getMinterpublickeypem();
+    const minterPublicKeyHash               = grpcResponse.getMinterpublickeyhash();
+    const devicePublicKeyHashSignedByMinter = grpcResponse.getDevicepublickeyhashsignedbyminter();
+
+    // Entrega estos datos a la app para que los guarde en su almacenamiento seguro
+    ```
+  </TabItem>
+  <TabItem label="Java">
+    ```java
+    OnboardingAttestation attestation = OnboardingAttestation.newBuilder()
+        .setChallengeId(challengeId)
+        .setPackageName("mx.mibanco.app")
+        .setPlatform("ANDROID")
+        .setKeyId(keyId)
+        .setToken(attestationToken)
+        .build();
+
+    OnboardDeviceForOfflinePaymentsRequest request = OnboardDeviceForOfflinePaymentsRequest.newBuilder()
+        .setSourceFspId("MIBANCO")
+        .setPublicKey(devicePublicKey)
+        .setPartyId("10011110002")
+        .setFspId("MIBANCO")
+        .setAttestation(attestation)
+        .build();
+
+    // Envía la solicitud al Switch
+    OnboardDeviceForOfflinePaymentsResponse grpcResponse = grpcClient.onboardDeviceForOfflinePayments(request);
+
+    // Maneja la respuesta
+    if (grpcResponse.hasError()) {
+        System.err.println("Error del Switch: "
+            + grpcResponse.getError().getCode() + " "
+            + grpcResponse.getError().getMessage());
+        return; // no continuar el flujo
+    }
+
+    String devicePublicKeyHash               = grpcResponse.getDevicePublicKeyHash();
+    String minterPublicKeyPem                = grpcResponse.getMinterPublicKeyPem();
+    String minterPublicKeyHash               = grpcResponse.getMinterPublicKeyHash();
+    String devicePublicKeyHashSignedByMinter = grpcResponse.getDevicePublicKeyHashSignedByMinter();
+    ```
+  </TabItem>
+  <TabItem label="C#">
+    ```csharp
+    var request = new OnboardDeviceForOfflinePaymentsRequest
+    {
+        SourceFspId = "MIBANCO",
+        PublicKey   = devicePublicKey,
+        PartyId     = "10011110002",
+        FspId       = "MIBANCO",
+        Attestation = new OnboardingAttestation
+        {
+            ChallengeId = challengeId,
+            PackageName = "mx.mibanco.app",
+            Platform    = "ANDROID",
+            KeyId       = keyId,
+            Token       = attestationToken,
+        },
+    };
+
+    // Envía la solicitud al Switch
+    var grpcResponse = await grpcClient.OnboardDeviceForOfflinePayments(request);
+
+    // Maneja la respuesta
+    if (grpcResponse.Error is not null)
+    {
+        Console.Error.WriteLine($"Error del Switch: {grpcResponse.Error.Code} {grpcResponse.Error.Message}");
+        return; // no continuar el flujo
+    }
+
+    var devicePublicKeyHash               = grpcResponse.DevicePublicKeyHash;
+    var minterPublicKeyPem                = grpcResponse.MinterPublicKeyPem;
+    var minterPublicKeyHash               = grpcResponse.MinterPublicKeyHash;
+    var devicePublicKeyHashSignedByMinter = grpcResponse.DevicePublicKeyHashSignedByMinter;
+    ```
+  </TabItem>
+  <TabItem label="PHP">
+    ```php
+    $attestation = (new OnboardingAttestation())
+        ->setChallengeId($challengeId)
+        ->setPackageName('mx.mibanco.app')
+        ->setPlatform('ANDROID')
+        ->setKeyId($keyId)
+        ->setToken($attestationToken);
+
+    $request = (new OnboardDeviceForOfflinePaymentsRequest())
+        ->setSourceFspId('MIBANCO')
+        ->setPublicKey($devicePublicKey)
+        ->setPartyId('10011110002')
+        ->setFspId('MIBANCO')
+        ->setAttestation($attestation);
+
+    // Envía la solicitud al Switch
+    $grpcResponse = $client->onboardDeviceForOfflinePayments($request);
+
+    // Maneja la respuesta
+    if ($grpcResponse->hasError()) {
+        fwrite(STDERR, 'Error del Switch: '
+            . $grpcResponse->getError()->getCode() . ' '
+            . $grpcResponse->getError()->getMessage() . "\n");
+        return; // no continuar el flujo
+    }
+
+    $devicePublicKeyHash               = $grpcResponse->getDevicePublicKeyHash();
+    $minterPublicKeyPem                = $grpcResponse->getMinterPublicKeyPem();
+    $minterPublicKeyHash               = $grpcResponse->getMinterPublicKeyHash();
+    $devicePublicKeyHashSignedByMinter = $grpcResponse->getDevicePublicKeyHashSignedByMinter();
+    ```
+  </TabItem>
+</Tabs>
+
+## Parámetros de la solicitud
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `sourceFspId` | `string` | Sí | FSP que origina la solicitud (el Participante). |
+| `publicKey` | `string` | Sí | Llave pública que generó el dispositivo para pagos offline. |
+| `partyId` | `string` | Sí | Identificador del Usuario (ej. número de celular). |
+| `fspId` | `string` | Sí | FSP del Usuario. |
+| `attestation` | `OnboardingAttestation` | Sí | Resultado de la atestación del dispositivo. Ver tabla siguiente. |
+
+### OnboardingAttestation
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `challengeId` | `string` | Identificador del challenge con el que se generó la atestación. |
+| `packageName` | `string` | Identificador del paquete de la app. |
+| `platform` | `string` | Plataforma del dispositivo. |
+| `keyId` | `string` | Identificador de la llave del dispositivo. |
+| `token` | `string` | Token de atestación emitido por el servicio de integridad de la plataforma. |
+
+## Respuesta exitosa
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `destinationFspId` | `string` | FSP destino de la respuesta (el Participante). |
+| `devicePublicKeyHash` | `string` | Hash de la llave pública del dispositivo. Identifica al dispositivo en las operaciones de pagos offline. |
+| `minterPublicKeyPem` | `string` | Llave pública, en formato PEM, con la que se firman los tokens. |
+| `minterPublicKeyHash` | `string` | Hash de esa llave pública. |
+| `devicePublicKeyHashSignedByMinter` | `string` | Hash de la llave del dispositivo, firmado. Permite a otro dispositivo validar la identidad sin conexión. |
+| `error` | `ErrorResponse` | Presente solo si no fue posible registrar el dispositivo. |
+
+<Aside type="caution">
+  La app debe conservar estos cuatro valores en su almacenamiento seguro: los necesita para firmar pagos, para validar los tokens que reciba y para identificarse ante el otro dispositivo durante un pago offline.
+</Aside>

@@ -51,6 +51,33 @@ export default defineConfig({
 								}
 							],
 						},
+						{
+							label: 'Pagos offline',
+							collapsed: false,
+							items: [
+								{
+									label: 'Introducción',
+									link: '/guides/offline-payments/introduction',
+								},
+								{
+									label: 'Reservar fondos para uso offline',
+									link: '/guides/offline-payments/offline-funds-reservation-handler',
+								},
+								{
+									label: 'Liquidar un pago offline',
+									link: '/guides/offline-payments/settle-offline-transfers-handler',
+								},
+								{
+									label: 'Liberar reserva offline',
+									link: '/guides/offline-payments/release-offline-funds-reservation-handler',
+								},
+								{
+									label: 'Integración con app propia',
+									autogenerate: { directory: 'guides/offline-payments/own-app' },
+									collapsed: true,
+								}
+							],
+						},
 					],
 				},
 				{
