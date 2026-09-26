@@ -1,16 +1,16 @@
 ---
 title: Presentar certificados de pagos offline
-description: Cómo presentar al Switch los certificados de pagos offline firmados, para que se validen y se acrediten.
+description: Cómo presentar al Switch los certificados de pagos offline firmados, para que se validen y se liquiden.
 sidebar:
   order: 5
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-`ProcessOfflineTransferCertificates` presenta al Switch los certificados de los pagos offline que ya ocurrieron entre dispositivos, para que se validen y se acrediten. Se envían todos los certificados pendientes de un mismo dispositivo en una sola llamada, y la respuesta trae un resultado por cada uno.
+`ProcessOfflineTransferCertificates` presenta al Switch los certificados de los pagos offline que ya ocurrieron entre dispositivos, para que se validen y se liquiden. Se envían todos los certificados pendientes de un mismo dispositivo en una sola llamada, y la respuesta trae un resultado por cada uno.
 
 <Aside type="note">
-  Tanto el dispositivo del pagador como el del beneficiario conservan una copia del certificado y cualquiera de los dos puede presentarlo. Un certificado ya acreditado no genera un segundo cargo.
+  Tanto el dispositivo del pagador como el del beneficiario conservan una copia del certificado y cualquiera de los dos puede presentarlo. Un certificado ya liquidado no genera un segundo cargo.
 </Aside>
 
 ## Enviar la solicitud
@@ -38,7 +38,7 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
       const transactionId = result.getTransactionid();
 
       if (result.getSuccess()) {
-        marcarPagoAcreditado(transactionId);
+        marcarPagoLiquidado(transactionId);
         continue;
       }
 
@@ -70,7 +70,7 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
     // Maneja el resultado de cada certificado por separado
     for (ProcessOfflineTransferCertificateResult result : grpcResponse.getResultsList()) {
         if (result.getSuccess()) {
-            marcarPagoAcreditado(result.getTransactionId());
+            marcarPagoLiquidado(result.getTransactionId());
         } else {
             System.err.println("Pago " + result.getTransactionId() + " rechazado: "
                 + result.getError().getCode() + " " + result.getError().getMessage());
@@ -103,7 +103,7 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
     {
         if (result.Success)
         {
-            MarcarPagoAcreditado(result.TransactionId);
+            MarcarPagoLiquidado(result.TransactionId);
             continue;
         }
 
@@ -131,7 +131,7 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
     // Maneja el resultado de cada certificado por separado
     foreach ($grpcResponse->getResults() as $result) {
         if ($result->getSuccess()) {
-            marcarPagoAcreditado($result->getTransactionId());
+            marcarPagoLiquidado($result->getTransactionId());
             continue;
         }
 
@@ -149,7 +149,7 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 | `sourceFspId` | `string` | Sí | FSP que origina la solicitud (el Participante). |
 | `requesterPublicKeyHash` | `string` | Sí | Hash de la llave pública del dispositivo que presenta los certificados. |
 | `attestationInfo` | `AttestationInfo` | Sí | Resultado de la atestación del dispositivo: `challengeId`, `packageName` y `token`. |
-| `certificates` | `OfflinePaymentCertificate[]` | Sí | Certificados de los pagos offline a acreditar. Ver tabla siguiente. |
+| `certificates` | `OfflinePaymentCertificate[]` | Sí | Certificados de los pagos offline a liquidar. Ver tabla siguiente. |
 
 ### OfflinePaymentCertificate
 
@@ -171,9 +171,9 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `transactionId` | `string` | Identificador del pago offline al que corresponde el resultado. |
-| `success` | `boolean` | `true` si el pago se acreditó. |
+| `success` | `boolean` | `true` si el pago se liquidó. |
 | `error` | `ErrorResponse` | Motivo del rechazo, cuando `success` es `false`. |
 
 <Aside type="caution">
-  Cada certificado se resuelve por separado: que uno sea rechazado no afecta a los demás. Recorre siempre la lista completa de resultados y no des por acreditado el lote entero.
+  Cada certificado se resuelve por separado: que uno sea rechazado no afecta a los demás. Recorre siempre la lista completa de resultados y no des por liquidado el lote entero.
 </Aside>

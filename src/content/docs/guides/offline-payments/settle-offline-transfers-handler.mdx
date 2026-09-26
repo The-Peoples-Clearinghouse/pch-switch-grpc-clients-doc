@@ -1,15 +1,15 @@
 ---
-title: Acreditar un pago offline
-description: Cómo registrar un handler para acreditar un pago offline contra la reserva de fondos del Usuario pagador.
+title: Liquidar un pago offline
+description: Cómo registrar un handler para liquidar un pago offline contra la reserva de fondos del Usuario pagador.
 sidebar:
   order: 3
 ---
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-Cuando el dispositivo del pagador o del beneficiario recupera la conexión, la app presenta el pago offline. Después de validarlo, el Switch envía al Participante del pagador una solicitud `SettleOfflineTransfer`. El Participante debe acreditar el pago contra la reserva offline del Usuario pagador y responder con el resultado.
+Cuando el dispositivo del pagador o del beneficiario recupera la conexión, la app presenta el pago offline. Después de validarlo, el Switch envía al Participante del pagador una solicitud `SettleOfflineTransfer`. El Participante debe liquidar el pago contra la reserva offline del Usuario pagador y responder con el resultado.
 
-Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función una vez por cada pago offline a acreditar.
+Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función una vez por cada pago offline a liquidar.
 
 {/* PENDIENTE DE VALIDAR EN EL PR — nada de esto está en el proto ni en el Switch,
     sale del simulador (pch-simulator, aggregate.ts:3000-3180) y no se documentó por eso:
@@ -31,7 +31,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
 
 ## Registrar el handler
 
-El handler recibe los datos del pago, los entrega al proceso de acreditación del Participante y devuelve el resultado en la respuesta.
+El handler recibe los datos del pago, los entrega al proceso de liquidación del Participante y devuelve el resultado en la respuesta.
 
 <Tabs syncKey="lenguaje">
   <TabItem label="TypeScript">
@@ -62,7 +62,7 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 
       // Acredita el pago offline según el proceso de tu banco.
       // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
-      const resultado = await acreditarPagoOffline({
+      const resultado = await liquidarPagoOffline({
         transactionId, amount, currency, note,
         payerId, payerName, payeeFspId, payeeId, payeeName, createdAt,
       });
@@ -102,7 +102,7 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 
         // Acredita el pago offline según el proceso de tu banco.
         // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
-        ResultadoAcreditacion resultado = acreditarPagoOffline(
+        ResultadoLiquidacion resultado = liquidarPagoOffline(
                 transactionId, amount, currency, note,
                 payerId, payerName, payeeFspId, payeeId, payeeName, createdAt);
 
@@ -143,7 +143,7 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 
         // Acredita el pago offline según el proceso de tu banco.
         // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
-        var resultado = await AcreditarPagoOffline(
+        var resultado = await LiquidarPagoOffline(
             transactionId, amount, currency, note,
             payerId, payerName, payeeFspId, payeeId, payeeName, createdAt);
 
@@ -187,7 +187,7 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 
         // Acredita el pago offline según el proceso de tu banco.
         // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
-        $resultado = acreditarPagoOffline(
+        $resultado = liquidarPagoOffline(
             $transactionId, $amount, $currency, $note,
             $payerId, $payerName, $payeeFspId, $payeeId, $payeeName, $createdAt);
 
@@ -214,7 +214,7 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 |---|---|---|
 | `sourceFspId` | `string` | FSP que origina la solicitud. |
 | `destinationFspId` | `string` | FSP al que va dirigida la solicitud (el Participante del pagador). |
-| `offlineTransfer` | `OfflineTransfer` | Datos del pago offline a acreditar. Ver tabla siguiente. |
+| `offlineTransfer` | `OfflineTransfer` | Datos del pago offline a liquidar. Ver tabla siguiente. |
 
 ### OfflineTransfer
 
@@ -238,7 +238,7 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 |---|---|---|---|
 | `sourceFspId` | `string` | Sí | FSP que responde (el Participante). Usa el `destinationFspId` de la solicitud. |
 | `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
-| `result` | `SettleOfflineTransferResult` | Sí | Resultado de la acreditación. Ver tabla siguiente. |
+| `result` | `SettleOfflineTransferResult` | Sí | Resultado de la liquidación. Ver tabla siguiente. |
 | `error` | `ErrorResponse` | No | No lo uses para reportar rechazos. Ver nota abajo. |
 
 ### SettleOfflineTransferResult
@@ -246,5 +246,5 @@ El handler recibe los datos del pago, los entrega al proceso de acreditación de
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
 | `transactionId` | `string` | Sí | Identificador del pago offline (mismo que el recibido). |
-| `success` | `boolean` | Sí | `true` si el pago se acreditó; `false` si fue rechazado. |
+| `success` | `boolean` | Sí | `true` si el pago se liquidó; `false` si fue rechazado. |
 | `errorCode` | `string` | No | Código del motivo de rechazo. Incluir cuando `success` sea `false`. |

@@ -64,7 +64,7 @@ export default defineConfig({
 									link: '/guides/offline-payments/offline-funds-reservation-handler',
 								},
 								{
-									label: 'Acreditar un pago offline',
+									label: 'Liquidar un pago offline',
 									link: '/guides/offline-payments/settle-offline-transfers-handler',
 								},
 								{
