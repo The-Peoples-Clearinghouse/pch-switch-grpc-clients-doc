@@ -9,7 +9,7 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 Cuando el dispositivo del pagador o del beneficiario recupera la conexión, la app presenta el pago offline. Después de validarlo, el Switch envía al Participante del pagador una solicitud `SettleOfflineTransfer`. El Participante debe liquidar el pago contra la reserva offline del Usuario pagador y responder con el resultado.
 
-Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRPC. El cliente invocará esta función una vez por cada pago offline a liquidar.
+Para recibir estas solicitudes, el Participante debe registrar un **handler** en el cliente gRPC. El cliente invocará esta función una vez por cada pago offline a liquidar.
 
 {/* PENDIENTE DE VALIDAR EN EL PR — nada de esto está en el proto ni en el Switch,
     sale del simulador (pch-simulator, aggregate.ts:3000-3180) y no se documentó por eso:
@@ -26,7 +26,7 @@ Para recibir estas solicitudes, debes registrar un **handler** en el cliente gRP
        El Switch no los define ni los valida. Falta saber si hay un catálogo oficial. */}
 
 <Aside type="caution">
-  El mismo pago puede llegar más de una vez, ya que tanto el pagador como el beneficiario pueden presentarlo. **Solo la primera solicitud válida debe generar el cargo.** Si recibes un `transactionId` que ya procesaste, responde con el mismo resultado de la primera vez, sin volver a debitar la reserva.
+  El mismo pago puede llegar más de una vez, ya que tanto el pagador como el beneficiario pueden presentarlo. **Solo la primera solicitud válida debe generar el cargo.** Ante un `transactionId` ya procesado, el Participante responde con el mismo resultado de la primera vez, sin volver a debitar la reserva.
 </Aside>
 
 ## Registrar el handler
@@ -60,7 +60,7 @@ El handler recibe los datos del pago, los entrega al proceso de liquidación del
       // El destino de la respuesta es quien originó la solicitud
       response.setDestinationfspid(sourceFspId);
 
-      // Acredita el pago offline según el proceso de tu banco.
+      // Liquida el pago offline según el proceso del Participante.
       // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
       const resultado = await liquidarPagoOffline({
         transactionId, amount, currency, note,
@@ -100,7 +100,7 @@ El handler recibe los datos del pago, los entrega al proceso de liquidación del
         // El destino de la respuesta es quien originó la solicitud
         String destinationFspId = req.getSourceFspId();
 
-        // Acredita el pago offline según el proceso de tu banco.
+        // Liquida el pago offline según el proceso del Participante.
         // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
         ResultadoLiquidacion resultado = liquidarPagoOffline(
                 transactionId, amount, currency, note,
@@ -141,7 +141,7 @@ El handler recibe los datos del pago, los entrega al proceso de liquidación del
         var payeeName     = offlineTransfer.PayeeName;
         var createdAt     = offlineTransfer.CreatedAt;
 
-        // Acredita el pago offline según el proceso de tu banco.
+        // Liquida el pago offline según el proceso del Participante.
         // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
         var resultado = await LiquidarPagoOffline(
             transactionId, amount, currency, note,
@@ -185,7 +185,7 @@ El handler recibe los datos del pago, los entrega al proceso de liquidación del
         $payeeName     = $offlineTransfer->getPayeeName();
         $createdAt     = $offlineTransfer->getCreatedAt();
 
-        // Acredita el pago offline según el proceso de tu banco.
+        // Liquida el pago offline según el proceso del Participante.
         // Debe ser idempotente: un transactionId ya procesado devuelve el resultado anterior.
         $resultado = liquidarPagoOffline(
             $transactionId, $amount, $currency, $note,
@@ -236,8 +236,8 @@ El handler recibe los datos del pago, los entrega al proceso de liquidación del
 
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
-| `sourceFspId` | `string` | Sí | FSP que responde (el Participante). Usa el `destinationFspId` de la solicitud. |
-| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Usa el `sourceFspId` de la solicitud. |
+| `sourceFspId` | `string` | Sí | FSP que responde (el Participante). Es el `destinationFspId` de la solicitud. |
+| `destinationFspId` | `string` | Sí | FSP destino de la respuesta. Es el `sourceFspId` de la solicitud. |
 | `result` | `SettleOfflineTransferResult` | Sí | Resultado de la liquidación. Ver tabla siguiente. |
 | `error` | `ErrorResponse` | No | No lo uses para reportar rechazos. Ver nota abajo. |
 

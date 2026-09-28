@@ -38,7 +38,7 @@ Con el challenge recibido, la app del Participante genera la atestación mediant
     const challengeId = grpcResponse.getChallengeid();
     const challenge   = grpcResponse.getChallenge();
 
-    // Entrega el challenge a la app para que genere la atestación
+    // El challenge se entrega a la app para que genere la atestación
     ```
   </TabItem>
   <TabItem label="Java">
@@ -61,7 +61,7 @@ Con el challenge recibido, la app del Participante genera la atestación mediant
     String challengeId = grpcResponse.getChallengeId();
     String challenge   = grpcResponse.getChallenge();
 
-    // Entrega el challenge a la app para que genere la atestación
+    // El challenge se entrega a la app para que genere la atestación
     ```
   </TabItem>
   <TabItem label="C#">
@@ -84,7 +84,7 @@ Con el challenge recibido, la app del Participante genera la atestación mediant
     var challengeId = grpcResponse.ChallengeId;
     var challenge   = grpcResponse.Challenge;
 
-    // Entrega el challenge a la app para que genere la atestación
+    // El challenge se entrega a la app para que genere la atestación
     ```
   </TabItem>
   <TabItem label="PHP">
@@ -106,7 +106,7 @@ Con el challenge recibido, la app del Participante genera la atestación mediant
     $challengeId = $grpcResponse->getChallengeId();
     $challenge   = $grpcResponse->getChallenge();
 
-    // Entrega el challenge a la app para que genere la atestación
+    // El challenge se entrega a la app para que genere la atestación
     ```
   </TabItem>
 </Tabs>
@@ -139,5 +139,5 @@ Con el challenge recibido, la app del Participante genera la atestación mediant
 Si el Switch no puede generar el challenge, `grpcResponse.getError()` devuelve un objeto con `code` y `message`. Si la solicitud no incluye `sourceFspId`, el Switch la ignora.
 
 <Aside type="caution">
-  Si la respuesta contiene un error, **no continúes**: sin un challenge válido la app no puede generar la atestación del dispositivo.
+  Si la respuesta contiene un error, el flujo **no debe continuar**: sin un challenge válido la app no puede generar la atestación del dispositivo.
 </Aside>

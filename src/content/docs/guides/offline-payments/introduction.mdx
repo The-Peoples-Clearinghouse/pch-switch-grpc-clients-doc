@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Los **pagos offline** permiten que un Usuario pague a otro desde una app móvil **sin conexión a internet**, usando Bluetooth entre ambos dispositivos. Para lograrlo, el Usuario reserva previamente una parte de su saldo y recibe en su dispositivo un conjunto de **tokens**. Cuando cualquiera de los dos dispositivos recupera la conexión, el pago se presenta al Switch y se convierte en una transferencia entre las cuentas del pagador y del beneficiario.
+Los **pagos offline** permiten que un Usuario pague a otro desde una app móvil **sin conexión a internet**, a través de Bluetooth entre ambos dispositivos. Para lograrlo, el Usuario reserva previamente una parte de su saldo y recibe en su dispositivo un conjunto de **tokens**. Cuando cualquiera de los dos dispositivos recupera la conexión, el pago se presenta al Switch y se convierte en una transferencia entre las cuentas del pagador y del beneficiario.
 
 ## Tokens
 
@@ -17,53 +17,48 @@ El token **no es dinero** y por sí solo no se puede cobrar. Sirve para que el p
 
 La contabilidad siempre la lleva el Participante. El Switch únicamente registra el estado de cada token, para impedir que el mismo token se gaste o se liquide dos veces.
 
-- Cada token tiene una denominación fija: **1 token equivale a 1 peso**. La única moneda soportada es `MXN`.
-- El Switch firma cada token de forma individual.
-- La app guarda los tokens cifrados en el almacenamiento seguro del dispositivo.
-- Cada token tiene una fecha de expiración, definida al generarlo.
+- Todos los tokens tienen la misma denominación: **1 token equivale a 1 peso**, y la única moneda soportada es `MXN`.
+- El Switch firma cada token por separado y le fija una fecha de expiración al generarlo.
+- La app los guarda cifrados en el almacenamiento seguro del dispositivo.
 
 <Aside type="caution" title="Importante">
-  Los tokens sirven para **un solo uso**. El beneficiario que recibe un pago offline no obtiene tokens gastables: obtiene un derecho pendiente de liquidación, y no puede usar lo recibido para una nueva transferencia offline antes de liquidarlo en línea.
+  Los tokens sirven para **un solo uso**. Quien recibe un pago offline no obtiene tokens que pueda volver a gastar, sino un derecho pendiente de liquidación: no puede usar ese dinero en otra transferencia offline hasta liquidarlo en línea.
 </Aside>
 
 ## Certificado de pago offline
 
-Cada pago entre dispositivos produce un **certificado de pago offline**: el comprobante de la operación, que después se presenta al Switch para liquidar el pago.
+Cada pago entre dispositivos produce un **certificado de pago offline**: el comprobante de la operación, que más tarde se presenta al Switch para liquidarla.
 
-El pagador propone el pago con los tokens que va a entregar, el beneficiario acepta firmando la propuesta y el pagador firma esa aceptación. Al quedar firmado por ambas partes, ninguna puede desconocer después la operación. Los dos dispositivos conservan una copia y cualquiera de los dos puede presentarla.
+El pagador propone el pago con los tokens que va a entregar, el beneficiario acepta firmando la propuesta y el pagador firma esa aceptación. Al quedar firmado por ambas partes, ninguna puede desconocer después la operación. Ambos dispositivos conservan una copia y cualquiera de los dos puede presentarla.
 
 ## Comunicación entre dispositivos
 
 El pago offline ocurre sobre un canal **Bluetooth Low Energy (BLE)** entre el dispositivo del pagador y el del beneficiario:
 
-- Los dispositivos se emparejan con el mecanismo nativo del sistema operativo, en su modalidad **autenticada, con protección contra intermediarios (MITM)**, que pide una confirmación numérica a ambos Usuarios. Hasta que el emparejamiento se completa no se intercambia ningún dato.
-- Sobre ese canal, la información va cifrada con **AES-GCM de 256 bits**.
-- Al inicio, ambos dispositivos intercambian sus certificados públicos. Con ellos validan, sin conexión, que el otro dispositivo está registrado para pagos offline y que los tokens los usa el dispositivo para el que fueron emitidos.
+- El emparejamiento es el nativo del sistema operativo, en su modalidad **autenticada, con protección contra intermediarios (MITM)**: pide a ambos Usuarios una confirmación numérica. Hasta que se completa, no se intercambia ningún dato.
+- La información que viaja por ese canal va cifrada con **AES-GCM de 256 bits**.
+- Al inicio, ambos dispositivos intercambian sus certificados públicos, con los que validan sin conexión dos cosas: que el otro dispositivo está registrado para pagos offline, y que quien entrega los tokens es el dispositivo para el que se emitieron.
 
 ## Seguridad
 
 ### Llaves y certificados
 
-- Cada dispositivo genera un par de llaves de uso exclusivo para pagos offline. Las llaves se almacenan en el **Secure Enclave** en iOS o en el **Android Keystore**.
-- El algoritmo de firma es **ed25519**, elegido principalmente para reducir el tamaño de las firmas durante la transferencia offline.
-- Al registrar un dispositivo, el Switch firma el hash de su llave pública. Ese hash funciona como identificador del dispositivo.
-- El dispositivo y el Switch intercambian certificados públicos, para poder validar identidades sin conexión y durante la liquidación del pago.
-
-### Durante la liquidación del pago
-
-- La comunicación en línea usa **gRPC autenticado con certificados y TLS**.
-- Antes de solicitar la liquidación al Participante, el Switch valida el certificado del pago, las firmas del pagador y del beneficiario, la firma y el estado de cada token.
-- La primera presentación válida de un pago es la única que genera el cargo. Las presentaciones posteriores devuelven el mismo resultado y no generan un segundo débito.
+- Cada dispositivo genera un par de llaves de uso exclusivo para pagos offline y lo guarda en el **Secure Enclave** en iOS o en el **Android Keystore**.
+- Las firmas usan **ed25519**, elegido para que ocupen menos espacio durante la transferencia offline.
+- Al registrar el dispositivo, el Switch firma el hash de su llave pública, que funciona como su identificador.
+- Dispositivo y Switch intercambian certificados públicos, para validar identidades sin conexión y durante la liquidación del pago.
 
 ### Atestación
 
-La **atestación** es la comprobación, hecha por los servicios de integridad de Google Play y de App Store, de que la app que opera pagos offline es la app oficial y de que el dispositivo donde corre es íntegro. El Switch entrega un challenge, la app genera con él la atestación en su plataforma, y el resultado viaja en las operaciones de pagos offline que lo requieren: el registro del dispositivo, la generación de tokens y la presentación de certificados.
+La **atestación** comprueba que la app que opera pagos offline es la app oficial y que el dispositivo donde corre es íntegro. La realizan los servicios de integridad de Google Play y de App Store.
+
+El Switch entrega un challenge, la app genera con él la atestación en su plataforma, y el resultado acompaña a las operaciones que lo requieren: el registro del dispositivo, la generación de tokens y la presentación de certificados.
 
 Para pasar la atestación, el dispositivo del Usuario debe cumplir:
 
-- **Android**: dispositivo no rooteado y con las llaves del dispositivo respaldadas por hardware, al menos en el entorno de ejecución confiable del procesador (*Trusted Execution Environment*). No basta con llaves protegidas únicamente por software.
-- **iOS**: dispositivo sin jailbreak, con iOS 15 o superior.
-- En ambos casos, la app debe haberse descargado de la tienda de aplicaciones oficial de cada sistema operativo.
+- **Android**: no rooteado, y con las llaves respaldadas por hardware, al menos en el entorno de ejecución confiable del procesador (*Trusted Execution Environment*). No basta con protegerlas por software.
+- **iOS**: sin jailbreak y con iOS 15 o superior.
+- En ambos casos, la app debe haberse descargado de la tienda de aplicaciones oficial del sistema operativo.
 
 ## Casos de uso
 
@@ -73,7 +68,7 @@ Antes de cualquier otra operación, el dispositivo del Usuario debe registrarse 
 
 ![Flujo de registro del dispositivo para pagos offline](../../../../assets/offline-onboarding-flow.webp)
 
-El Participante no implementa nada en este flujo cuando sus Usuarios operan con la app PISP. Con app propia, el registro se hace con [Registrar un dispositivo](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/onboard-device-for-offline-payments/).
+Cuando los Usuarios operan con la app PISP, el Participante no implementa nada en este flujo. Con app propia, el registro se hace con [Registrar un dispositivo](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/onboard-device-for-offline-payments/).
 
 ### Flujos que atiende el Participante
 
@@ -84,7 +79,7 @@ El Participante **responde a las solicitudes que le envía el Switch**, registra
 - **[Liberar la reserva](/pch-switch-grpc-clients-doc/guides/offline-payments/release-offline-funds-reservation-handler/)**: el Usuario indica desde la app el monto que quiere liberar, y el Participante lo devuelve a su saldo disponible.
 
 <Aside type="note">
-  Estos son los **únicos métodos** que el Participante debe implementar cuando sus Usuarios operan con la app PISP de la Cámara, que se encarga del registro del dispositivo, de la atestación, del pago por Bluetooth y de presentar los pagos para su liquidación.
+  Cuando los Usuarios operan con la app PISP de la Cámara, estos tres son los **únicos métodos** que el Participante debe implementar: la app se encarga del registro del dispositivo, de la atestación, del pago por Bluetooth y de presentar los pagos para su liquidación.
 
-  Si el Participante quiere ofrecer pagos offline desde la app de su propio banco, además debe invocar los métodos que la app PISP invoca en su lugar y resolver en su app la parte del dispositivo. Todo eso se documenta en [Integración con app propia](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/app-specifications/).
+  Para ofrecer pagos offline desde su propia app, el Participante además debe invocar los métodos que la app PISP invoca en su lugar y resolver en su app la parte del dispositivo. Eso se documenta en [Integración con app propia](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/app-specifications/).
 </Aside>
