@@ -62,15 +62,9 @@ Para pasar la atestación, el dispositivo del Usuario debe cumplir:
 
 ## Casos de uso
 
-### Registro del dispositivo
+Estos son los flujos que componen los pagos offline:
 
-Antes de cualquier otra operación, el dispositivo del Usuario debe registrarse para pagos offline: genera su par de llaves, comprueba su integridad mediante la [atestación](#atestación) y queda identificado ante el Switch por el hash de su llave pública.
-
-![Flujo de registro del dispositivo para pagos offline](../../../../assets/offline-onboarding-flow.webp)
-
-Cuando los Usuarios operan con la app PISP, el Participante no implementa nada en este flujo. Con app propia, el registro se hace con [Registrar un dispositivo](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/onboard-device-for-offline-payments/).
-
-### Flujos que atiende el Participante
+- **Registro del dispositivo**: el dispositivo del Usuario genera su par de llaves, comprueba su integridad mediante la [atestación](#atestación) y queda identificado ante el Switch por el hash de su llave pública. Es requisito para todo lo demás. El Participante no atiende ninguna solicitud en este flujo: con la app PISP lo resuelve la propia app, y con app propia se hace con [Registrar un dispositivo](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/onboard-device-for-offline-payments/).
 
 El Participante **responde a las solicitudes que le envía el Switch**, registrando los handlers correspondientes en el cliente gRPC:
 
@@ -79,7 +73,6 @@ El Participante **responde a las solicitudes que le envía el Switch**, registra
 - **[Liberar la reserva](/pch-switch-grpc-clients-doc/guides/offline-payments/release-offline-funds-reservation-handler/)**: el Usuario indica desde la app el monto que quiere liberar, y el Participante lo devuelve a su saldo disponible.
 
 <Aside type="note">
-  Cuando los Usuarios operan con la app PISP de la Cámara, estos tres son los **únicos métodos** que el Participante debe implementar: la app se encarga del registro del dispositivo, de la atestación, del pago por Bluetooth y de presentar los pagos para su liquidación.
 
   Para ofrecer pagos offline desde su propia app, el Participante además debe invocar los métodos que la app PISP invoca en su lugar y resolver en su app la parte del dispositivo. Eso se documenta en [Integración con app propia](/pch-switch-grpc-clients-doc/guides/offline-payments/own-app/app-specifications/).
 </Aside>

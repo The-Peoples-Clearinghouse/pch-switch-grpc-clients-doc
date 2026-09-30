@@ -9,6 +9,8 @@ import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 `ProcessOfflineTransferCertificates` presenta al Switch los certificados de los pagos offline que ya ocurrieron entre dispositivos, para que se validen y se liquiden. Se envían todos los certificados pendientes de un mismo dispositivo en una sola llamada, y la respuesta trae un resultado por cada uno.
 
+![Flujo de liquidación de un pago offline](../../../../../assets/offline-settlement-flow.webp)
+
 <Aside type="note">
   Tanto el dispositivo del pagador como el del beneficiario conservan una copia del certificado y cualquiera de los dos puede presentarlo. Un certificado ya liquidado no genera un segundo cargo.
 </Aside>
